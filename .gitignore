@@ -1,0 +1,28 @@
+# Dependencies & Environment
+node_modules/
+.pnpm-store/
+backend/venv/
+.env
+*.env.local
+
+# Next.js Build
+frontend/.next/
+frontend/out/
+
+# Python Cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local Storage & Database
+backend/storage/artifacts/
+backend/storage/uploads/
+backend/storage/evidence/
+backend/*.db
+backend/*.db-journal
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
