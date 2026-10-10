@@ -1,10 +1,12 @@
 import hashlib
+import io
 import re
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import openpyxl
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 EXTERNAL_LINK_REGEX = re.compile(r"(\[\d+\]|\.xlsx?!|#REF!|#VALUE!|#NAME\?)", re.IGNORECASE)
 
@@ -28,6 +30,168 @@ class ExcelImportService:
             while chunk := f.read(8192):
                 sha256.update(chunk)
         return sha256.hexdigest()
+
+    def generate_template_workbook(self) -> bytes:
+        """Generates a standardized, clean .xlsx template workbook compatible with FR02 structural parser."""
+        wb = openpyxl.Workbook()
+
+        # 1. Primary Sheet: HPS
+        ws = wb.active
+        ws.title = "HPS"
+
+        title_font = Font(name="Calibri", size=12, bold=True, color="1E293B")
+        subtitle_font = Font(name="Calibri", size=10, bold=False, color="334155")
+        section_font = Font(name="Calibri", size=11, bold=True, color="0F172A")
+        label_font = Font(name="Calibri", size=10, bold=True, color="1E293B")
+        val_font = Font(name="Calibri", size=10, bold=False, color="0F172A")
+        header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+        zebra_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+        total_fill = PatternFill(start_color="E2E8F0", end_color="E2E8F0", fill_type="solid")
+
+        thin_side = Side(style="thin", color="CBD5E1")
+        border_cell = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+        # School Header (Rows 1..4)
+        ws["B1"] = "PEMERINTAH PROVINSI DKI JAKARTA - DINAS PENDIDIKAN"
+        ws["B1"].font = subtitle_font
+        ws["B2"] = "SEKOLAH DASAR NEGERI KEBON KOSONG 09"
+        ws["B2"].font = title_font
+        ws["B3"] = "Jl. Kemayoran Gempol no.32"
+        ws["B3"].font = subtitle_font
+        ws["B4"] = "Email: sdnkk09pg@gmail.com"
+        ws["B4"].font = subtitle_font
+
+        # Document Title (Row 6)
+        ws["B6"] = "HARGA PERKIRAAN SENDIRI (HPS) PENGADAAN BARANG / JASA"
+        ws["B6"].font = section_font
+
+        # Transaction Metadata (Rows 8..11)
+        meta_rows = [
+            (8, "Kegiatan", "Pemeliharaan Sarana dan Prasarana Sekolah"),
+            (9, "Rincian Kegiatan", "Pembelian Bahan Kebersihan Sekolah"),
+            (10, "Kode Rekening", "Bahan-bahan lainnya"),
+            (11, "Tahun Anggaran", 2026),
+        ]
+        for r_idx, label, value in meta_rows:
+            ws.cell(row=r_idx, column=2, value=label).font = label_font
+            ws.cell(row=r_idx, column=3, value=":").font = label_font
+            c_val = ws.cell(row=r_idx, column=4, value=value)
+            c_val.font = val_font
+            c_val.alignment = Alignment(horizontal="left", vertical="center")
+
+        # Table Headers (Row 14)
+        headers = [
+            (1, "No"),
+            (2, "Nama Barang / Uraian"),
+            (3, "Volume"),
+            (4, "Satuan"),
+            (5, "Spesifikasi"),
+            (6, "Harga Satuan"),
+            (7, "Jumlah Total"),
+        ]
+        header_row = 14
+        for col_idx, text in headers:
+            cell = ws.cell(row=header_row, column=col_idx, value=text)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border_cell
+        ws.row_dimensions[header_row].height = 24
+
+        # Sample Line Items (Rows 15..22)
+        sample_items = [
+            (1, "glass cleaner", 15, "liter", "Cairan pembersih kaca kemasan jerigen", 16000, 240000),
+            (2, "hand soap", 15, "liter", "Sabun cuci tangan antiseptik", 16000, 240000),
+            (3, "karbol wangi", 15, "liter", "Disinfektan lantai aroma pinus", 18000, 270000),
+            (4, "pembersih lantai", 15, "liter", "Cairan pembersih lantai keramik", 16000, 240000),
+            (5, "pembersih porselen", 15, "liter", "Cairan pembersih noda keramik kamar mandi", 19000, 285000),
+            (6, "tempat sampah", 12, "buah", "Tempat sampah plastik tertutup kapasitas 50L", 45000, 540000),
+            (7, "sapu ijuk", 12, "buah", "Sapu lantai ijuk gagang kayu kualitas baik", 20000, 240000),
+            (8, "pengharum kloset", 10, "buah", "Kamper pengharum kloset gantung", 23000, 230000),
+        ]
+
+        start_row = header_row + 1
+        grand_sum = 0
+        for idx, (no, name, vol, unit, spec, price, total) in enumerate(sample_items):
+            r = start_row + idx
+            grand_sum += total
+            row_fill = zebra_fill if idx % 2 == 1 else PatternFill(fill_type=None)
+
+            c_no = ws.cell(row=r, column=1, value=no)
+            c_name = ws.cell(row=r, column=2, value=name)
+            c_vol = ws.cell(row=r, column=3, value=vol)
+            c_unit = ws.cell(row=r, column=4, value=unit)
+            c_spec = ws.cell(row=r, column=5, value=spec)
+            c_price = ws.cell(row=r, column=6, value=price)
+            c_total = ws.cell(row=r, column=7, value=total)
+
+            c_no.alignment = Alignment(horizontal="center", vertical="center")
+            c_name.alignment = Alignment(horizontal="left", vertical="center")
+            c_vol.alignment = Alignment(horizontal="center", vertical="center")
+            c_unit.alignment = Alignment(horizontal="center", vertical="center")
+            c_spec.alignment = Alignment(horizontal="left", vertical="center")
+            c_price.alignment = Alignment(horizontal="right", vertical="center")
+            c_total.alignment = Alignment(horizontal="right", vertical="center")
+
+            c_price.number_format = "#,##0"
+            c_total.number_format = "#,##0"
+
+            for c in (c_no, c_name, c_vol, c_unit, c_spec, c_price, c_total):
+                c.font = val_font
+                c.border = border_cell
+                if row_fill.fill_type:
+                    c.fill = row_fill
+
+        # Terminal Row (JUMLAH)
+        term_row = start_row + len(sample_items)
+        c_term_label = ws.cell(row=term_row, column=1, value="JUMLAH")
+        c_term_label.font = label_font
+        c_term_label.alignment = Alignment(horizontal="center", vertical="center")
+        for col_i in range(1, 7):
+            cell_t = ws.cell(row=term_row, column=col_i)
+            cell_t.fill = total_fill
+            cell_t.border = border_cell
+            cell_t.font = label_font
+
+        c_term_total = ws.cell(row=term_row, column=7, value=grand_sum)
+        c_term_total.font = label_font
+        c_term_total.fill = total_fill
+        c_term_total.border = border_cell
+        c_term_total.alignment = Alignment(horizontal="right", vertical="center")
+        c_term_total.number_format = "#,##0"
+
+        # Column widths
+        col_widths = {1: 8, 2: 30, 3: 12, 4: 12, 5: 38, 6: 18, 7: 18}
+        for col_idx, width in col_widths.items():
+            col_letter = openpyxl.utils.get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = width
+
+        # 2. Secondary Sheet: PETUNJUK_PENGISIAN
+        ws_guide = wb.create_sheet(title="PETUNJUK_PENGISIAN")
+        ws_guide["A1"] = "PANDUAN PENGISIAN FORMAT IMPOR PENGADAAN & SPJ (FR02)"
+        ws_guide["A1"].font = title_font
+
+        guide_lines = [
+            (3, "1. Lembar Utama ('HPS')", "Sistem membaca lembar kerja 'HPS' (atau lembar pertama) sebagai sumber ekstraksi utama."),
+            (4, "2. Identitas Sekolah (Baris 1-7)", "Pastikan mencantumkan Nama Sekolah (SDN/SMPN/SMAN/SMKN), Alamat (Jl. ...), dan Email sekolah pada bagian kop atas."),
+            (5, "3. Metadata Kegiatan (Baris 8-12)", "Cantumkan label 'Kegiatan', 'Rincian Kegiatan', 'Kode Rekening', dan 'Tahun Anggaran' beserta isiannya di kolom sebelah kanan."),
+            (6, "4. Tabel Rincian Barang", "Gunakan kolom: No | Nama Barang / Uraian | Volume | Satuan | Spesifikasi | Harga Satuan | Jumlah Total."),
+            (7, "5. Baris Penutup Tabel", "Akhiri daftar barang dengan baris bertuliskan 'JUMLAH' atau 'TOTAL' pada kolom pertama/kedua."),
+            (8, "6. Aturan Validasi", "Hindari penggunaan rumus yang merujuk ke file Excel eksternal agar tidak terblokir oleh pemindai disrepansi."),
+        ]
+        for r_idx, topic, desc in guide_lines:
+            c1 = ws_guide.cell(row=r_idx, column=1, value=topic)
+            c2 = ws_guide.cell(row=r_idx, column=2, value=desc)
+            c1.font = label_font
+            c2.font = val_font
+
+        ws_guide.column_dimensions["A"].width = 34
+        ws_guide.column_dimensions["B"].width = 85
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
 
     def parse_workbook(self, file_path: Path) -> Dict[str, Any]:
         """Loads and parses the reference Excel workbook safely in data_only and formula modes."""
@@ -75,7 +239,10 @@ class ExcelImportService:
             for c in range(1, min(ws.max_column + 1, 10)):
                 val = str(ws.cell(row=r, column=c).value or "").strip()
                 val_upper = val.upper()
-                if not name and ("SEKOLAH DASAR" in val_upper or "SDN" in val_upper or "SD NEGERI" in val_upper):
+                if not name and any(
+                    kw in val_upper
+                    for kw in ("SEKOLAH DASAR", "SDN", "SD NEGERI", "SMP", "SMA", "SMK", "MADRASAH")
+                ):
                     name = val
                 if not address and ("JL." in val_upper or "JALAN" in val_upper):
                     address = val

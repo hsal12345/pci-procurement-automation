@@ -4,6 +4,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.api.deps import get_current_actor_name, get_current_user_role
@@ -18,6 +19,19 @@ from app.core.terbilang import terbilang
 
 router = APIRouter(prefix="/imports", tags=["Imports"])
 import_service = ExcelImportService()
+
+
+@router.get("/template")
+async def download_import_template():
+    """Downloads a clean, standardized Excel (.xlsx) template compatible with FR02 import."""
+    workbook_bytes = import_service.generate_template_workbook()
+    return Response(
+        content=workbook_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="Format_Impor_Pengadaan_SPJ_PCI.xlsx"'
+        },
+    )
 
 
 @router.post("/upload", response_model=ImportUploadResponse, status_code=status.HTTP_202_ACCEPTED)

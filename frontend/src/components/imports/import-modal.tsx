@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { UploadCloud, FileSpreadsheet, AlertTriangle, CheckCircle2, X, Loader2, Sparkles } from "lucide-react";
-import { getAuthToken, getCurrentActorName, getCurrentRole } from "@/lib/api-client";
+import { UploadCloud, FileSpreadsheet, AlertTriangle, CheckCircle2, X, Loader2, Sparkles, Download } from "lucide-react";
+import { apiClient, getAuthToken, getCurrentActorName, getCurrentRole } from "@/lib/api-client";
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -13,11 +13,23 @@ interface ImportModalProps {
 export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [fiscalYear, setFiscalYear] = useState<number>(2026);
   const [quarter, setQuarter] = useState<number>(2);
   const [fundSource, setFundSource] = useState<string>("BOS_REGULER");
 
   if (!isOpen) return null;
+
+  const handleDownloadTemplate = async () => {
+    setIsDownloading(true);
+    try {
+      await apiClient.downloadImportTemplate();
+    } catch (err: any) {
+      alert(err.message || "Gagal mengunduh format template.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -100,7 +112,7 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="w-4 h-4 text-primary" />
             <h3 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
-              Impor Buku Kerja Excel (4 PCI KK09.xlsx)
+              Impor Buku Kerja Excel (.xlsx)
             </h3>
           </div>
           <button
@@ -186,18 +198,29 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
                     Pilih berkas Excel (.xlsx) yang akan diimpor
                   </span>
                   <span className="block text-[10px] text-muted-foreground font-mono">
-                    Mendukung template 4 PCI KK09.xlsx
+                    Mendukung Format_Impor_Pengadaan_SPJ_PCI.xlsx & 4 PCI KK09.xlsx
                   </span>
                 </div>
               )}
             </label>
           </div>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono bg-muted/20 p-2.5 rounded border border-border">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-            <span>
-              Parser akan mengekstrak otomatis lembar HPS, Surat Penawaran, SP, BAST, dan Kwitansi serta memetakan kolom.
-            </span>
+          <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground font-mono bg-muted/20 p-2.5 rounded border border-border">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+              <span>
+                Belum punya formatnya? Unduh template Excel standar.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              disabled={isDownloading}
+              className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary font-sans font-semibold text-[11px] transition disabled:opacity-50"
+            >
+              {isDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+              <span>Unduh Format</span>
+            </button>
           </div>
 
           {/* Buttons */}

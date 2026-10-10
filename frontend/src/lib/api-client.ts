@@ -347,6 +347,34 @@ export const apiClient = {
       method: "POST",
     }),
 
+  downloadImportTemplate: async () => {
+    const token = getAuthToken();
+    const headers: Record<string, string> = {
+      "X-User-Role": getCurrentRole(),
+      "X-Actor-Name": getCurrentActorName(),
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`${API_BASE}/api/v1/imports/template`, {
+      method: "GET",
+      headers,
+    });
+    if (!res.ok) {
+      throw new Error("Gagal mengunduh format template Excel.");
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Format_Impor_Pengadaan_SPJ_PCI.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
   // Logistics
   getLogistics: (revisionId: string) =>
     request<LogisticsRecord>(`/api/v1/revisions/${revisionId}/logistics`),
