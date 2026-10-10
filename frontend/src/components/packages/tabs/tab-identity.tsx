@@ -10,6 +10,7 @@ import {
 } from "@/types/package";
 import { normalizeLeadingZeros } from "@/lib/formatters";
 import { apiClient } from "@/lib/api-client";
+import { CreateCompanyModal } from "@/components/packages/create-company-modal";
 import {
   Building2,
   Landmark,
@@ -152,6 +153,7 @@ export function TabIdentity({
 
   // Add Official to Master Modal State
   const [showAddOfficialModal, setShowAddOfficialModal] = useState(false);
+  const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const [newOfficialRole, setNewOfficialRole] = useState("KEPALA_SEKOLAH");
   const [newOfficialName, setNewOfficialName] = useState("");
   const [newOfficialNip, setNewOfficialNip] = useState("");
@@ -241,7 +243,9 @@ export function TabIdentity({
     // Also load registered officials for this school
     try {
       const offs = await apiClient.getSchoolOfficials(sc.id);
-      let updatedOfficials = [...officials];
+      let updatedOfficials: OfficialSnapshotItem[] = [];
+      const direktur = officials.find((o) => o.role === "DIREKTUR");
+
       if (offs && offs.length > 0) {
         const mappedSchoolOfficials: OfficialSnapshotItem[] = offs.map((o: any) => ({
           role: o.role,
@@ -249,17 +253,46 @@ export function TabIdentity({
           person_name: o.person_name,
           name: o.person_name,
           nip: o.nip,
-          position_sk_number: "",
+          position_sk_number: o.position_sk_number || "",
         }));
 
-        // Keep DIREKTUR from current officials
-        const direktur = officials.find((o) => o.role === "DIREKTUR");
         if (direktur) {
           mappedSchoolOfficials.push(direktur);
         }
         updatedOfficials = mappedSchoolOfficials;
-        setOfficials(updatedOfficials);
+      } else {
+        // Reset school officials so we don't leak the previous school's officials
+        updatedOfficials = [
+          {
+            role: "KEPALA_SEKOLAH",
+            role_title: "Kepala Sekolah",
+            person_name: "",
+            name: "",
+            nip: "",
+            position_sk_number: "",
+          },
+          {
+            role: "BENDAHARA",
+            role_title: "Bendahara BOS",
+            person_name: "",
+            name: "",
+            nip: "",
+            position_sk_number: "",
+          },
+          {
+            role: "PENGURUS_BARANG",
+            role_title: "Pengurus Barang",
+            person_name: "",
+            name: "",
+            nip: "",
+            position_sk_number: "",
+          },
+        ];
+        if (direktur) {
+          updatedOfficials.push(direktur);
+        }
       }
+      setOfficials(updatedOfficials);
       onIdentityChanged({
         school_snapshot: updatedSchool,
         company_snapshot: company,
@@ -274,7 +307,7 @@ export function TabIdentity({
     }
   };
 
-  const handleSelectMasterCompany = (compId: string) => {
+  const handleSelectMasterCompany = async (compId: string) => {
     const cp = masterCompanies.find((c) => c.id === compId);
     if (!cp) return;
 
@@ -289,17 +322,49 @@ export function TabIdentity({
     };
     setCompany(updatedCompany);
 
+    let directorName = cp.director_name || "";
+    let directorSk = cp.director_sk_number || "";
+    let directorNip = null;
+
+    try {
+      const compOfficials = await apiClient.getCompanyOfficials(cp.id);
+      const dir = compOfficials?.find((o: any) => o.role === "DIREKTUR") || compOfficials?.[0];
+      if (dir) {
+        directorName = dir.person_name || directorName;
+        directorSk = dir.position_sk_number || directorSk;
+        directorNip = dir.nip ?? null;
+      }
+    } catch {
+      // fallback to company base fields
+    }
+
     // Update DIREKTUR in officials list
+    let foundDirektur = false;
     const updatedOfficials = officials.map((o) => {
       if (o.role === "DIREKTUR") {
+        foundDirektur = true;
         return {
           ...o,
-          person_name: cp.director_name || o.person_name,
-          name: cp.director_name || o.name,
+          person_name: directorName || o.person_name,
+          name: directorName || o.name,
+          nip: directorNip,
+          position_sk_number: directorSk || o.position_sk_number,
         };
       }
       return o;
     });
+
+    if (!foundDirektur && directorName) {
+      updatedOfficials.push({
+        role: "DIREKTUR",
+        role_title: "Direktur Rekanan",
+        person_name: directorName,
+        name: directorName,
+        nip: directorNip,
+        position_sk_number: directorSk,
+      });
+    }
+
     setOfficials(updatedOfficials);
 
     onIdentityChanged({
@@ -307,6 +372,18 @@ export function TabIdentity({
       company_snapshot: updatedCompany,
       officials_snapshot: updatedOfficials,
     });
+  };
+
+  const handleCompanyCreated = async (newComp: any) => {
+    try {
+      const cps = await apiClient.getCompanies();
+      setMasterCompanies(cps || []);
+      if (newComp?.id) {
+        await handleSelectMasterCompany(newComp.id);
+      }
+    } catch {
+      // ignore
+    }
   };
 
   const handleLoadSchoolOfficials = async () => {
@@ -334,7 +411,7 @@ export function TabIdentity({
         person_name: o.person_name,
         name: o.person_name,
         nip: o.nip,
-        position_sk_number: "",
+        position_sk_number: o.position_sk_number || "",
       }));
 
       const direktur = officials.find((o) => o.role === "DIREKTUR");
@@ -376,6 +453,7 @@ export function TabIdentity({
         role: newOfficialRole,
         person_name: newOfficialName.trim(),
         nip: newOfficialNip.trim() || undefined,
+        position_sk_number: newOfficialSk.trim() || undefined,
         valid_from: "2026-01-01",
       });
 
@@ -715,23 +793,37 @@ export function TabIdentity({
           </div>
 
           {/* Master Company Quick Selector */}
-          {!isReadOnly && masterCompanies.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-mono text-muted-foreground">Pilih Rekanan:</span>
-              <select
-                onChange={(e) => handleSelectMasterCompany(e.target.value)}
-                defaultValue=""
-                className="px-2 py-1 bg-background border border-border rounded text-[11px] outline-none focus:ring-1 focus:ring-ring font-sans"
+          {!isReadOnly && (
+            <div className="flex items-center gap-2">
+              {masterCompanies.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-mono text-muted-foreground">Pilih Rekanan:</span>
+                  <select
+                    onChange={(e) => handleSelectMasterCompany(e.target.value)}
+                    defaultValue=""
+                    className="px-2 py-1 bg-background border border-border rounded text-[11px] outline-none focus:ring-1 focus:ring-ring font-sans"
+                  >
+                    <option value="" disabled>
+                      -- Pilih Badan Usaha Rekanan --
+                    </option>
+                    {masterCompanies.map((cp) => (
+                      <option key={cp.id} value={cp.id}>
+                        {cp.legal_name || cp.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowAddCompanyModal(true)}
+                className="flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition font-medium"
+                title="Tambah Badan Usaha Rekanan Baru"
               >
-                <option value="" disabled>
-                  -- Pilih Badan Usaha Rekanan --
-                </option>
-                {masterCompanies.map((cp) => (
-                  <option key={cp.id} value={cp.id}>
-                    {cp.legal_name || cp.name}
-                  </option>
-                ))}
-              </select>
+                <Plus className="w-3 h-3 text-emerald-400" />
+                <span>+ Tambah Rekanan</span>
+              </button>
             </div>
           )}
         </div>
@@ -829,13 +921,13 @@ export function TabIdentity({
 
           <div className="flex flex-wrap items-center gap-2">
             {isBR09Satisfied ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800">
-                <CheckCircle2 className="w-3 h-3" />
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-emerald-300 bg-emerald-500/15 px-2.5 py-1 rounded border border-emerald-500/30 font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 <span>BR09 Lolos (3 Pejabat Sekolah Terisi)</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-rose-400 bg-rose-950/40 px-2 py-0.5 rounded border border-rose-800">
-                <AlertCircle className="w-3 h-3" />
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-rose-300 bg-rose-500/15 px-2.5 py-1 rounded border border-rose-500/30 font-semibold">
+                <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
                 <span>BR09 Belum Lengkap</span>
               </span>
             )}
@@ -845,7 +937,7 @@ export function TabIdentity({
                 <button
                   type="button"
                   onClick={handleLoadSchoolOfficials}
-                  className="flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded bg-sky-950/50 text-sky-300 border border-sky-800 hover:bg-sky-900/60 transition"
+                  className="flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 hover:bg-sky-500/25 transition font-medium"
                   title="Ambil pejabat terdaftar di master data sekolah ini"
                 >
                   <RefreshCw className="w-3 h-3 text-sky-400" />
@@ -855,7 +947,7 @@ export function TabIdentity({
                 <button
                   type="button"
                   onClick={() => setShowAddOfficialModal(true)}
-                  className="flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded bg-emerald-950/50 text-emerald-300 border border-emerald-800 hover:bg-emerald-900/60 transition"
+                  className="flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition font-medium"
                   title="Daftarkan pejabat baru ke master sekolah"
                 >
                   <UserPlus className="w-3 h-3 text-emerald-400" />
@@ -865,7 +957,7 @@ export function TabIdentity({
                 <button
                   type="button"
                   onClick={handleApplyDefaultOfficials}
-                  className="flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded bg-muted text-muted-foreground border border-border hover:bg-muted/80 transition"
+                  className="flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded bg-muted text-foreground border border-border hover:bg-muted/80 transition font-medium"
                   title="Gunakan template awal SDN KK 09"
                 >
                   <Sparkles className="w-3 h-3 text-amber-400" />
@@ -877,42 +969,42 @@ export function TabIdentity({
         </div>
 
         {/* Required Roles Status Badges */}
-        <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
+        <div className="grid grid-cols-3 gap-2.5 font-mono text-[11px]">
           <div
-            className={`p-2 rounded border flex items-center justify-between ${
+            className={`p-2.5 rounded border flex items-center justify-between font-medium ${
               hasKepalaSekolah
-                ? "bg-emerald-950/20 border-emerald-800/60 text-emerald-300"
-                : "bg-rose-950/20 border-rose-800/60 text-rose-300"
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                : "bg-rose-500/10 border-rose-500/30 text-rose-300"
             }`}
           >
             <span>1. Kepala Sekolah:</span>
-            <span className="font-semibold">
+            <span className="font-bold">
               {hasKepalaSekolah ? "OK" : "Wajib Diisi"}
             </span>
           </div>
 
           <div
-            className={`p-2 rounded border flex items-center justify-between ${
+            className={`p-2.5 rounded border flex items-center justify-between font-medium ${
               hasBendahara
-                ? "bg-emerald-950/20 border-emerald-800/60 text-emerald-300"
-                : "bg-rose-950/20 border-rose-800/60 text-rose-300"
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                : "bg-rose-500/10 border-rose-500/30 text-rose-300"
             }`}
           >
             <span>2. Bendahara BOS:</span>
-            <span className="font-semibold">
+            <span className="font-bold">
               {hasBendahara ? "OK" : "Wajib Diisi"}
             </span>
           </div>
 
           <div
-            className={`p-2 rounded border flex items-center justify-between ${
+            className={`p-2.5 rounded border flex items-center justify-between font-medium ${
               hasPengurusBarang
-                ? "bg-emerald-950/20 border-emerald-800/60 text-emerald-300"
-                : "bg-rose-950/20 border-rose-800/60 text-rose-300"
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                : "bg-rose-500/10 border-rose-500/30 text-rose-300"
             }`}
           >
             <span>3. Pengurus Barang:</span>
-            <span className="font-semibold">
+            <span className="font-bold">
               {hasPengurusBarang ? "OK" : "Wajib Diisi"}
             </span>
           </div>
@@ -1034,13 +1126,13 @@ export function TabIdentity({
 
           <div className="flex items-center gap-2">
             {taxPolicies.length > 0 ? (
-              <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800">
-                <CheckCircle2 className="w-3 h-3" />
+              <span className="flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 <span>{taxPolicies.length} Kebijakan Pajak Aktif</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-red-950/40 text-red-400 border border-red-800 font-bold animate-pulse">
-                <AlertCircle className="w-3 h-3" />
+              <span className="flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/30 font-bold animate-pulse">
+                <AlertCircle className="w-3.5 h-3.5 text-red-400" />
                 <span>BELUM DITETAPKAN (BR06 BLOCK)</span>
               </span>
             )}
@@ -1053,8 +1145,8 @@ export function TabIdentity({
 
         {/* Quick Presets */}
         {!isReadOnly && (
-          <div className="p-3 bg-muted/20 border border-border/60 rounded-md space-y-2">
-            <div className="text-[11px] font-mono font-medium text-foreground flex items-center gap-1.5">
+          <div className="p-3 bg-muted/40 border border-border rounded-md space-y-2">
+            <div className="text-[11px] font-mono font-semibold text-foreground flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
               <span>Terapkan Template Kebijakan Pajak Cepat:</span>
             </div>
@@ -1063,7 +1155,7 @@ export function TabIdentity({
                 type="button"
                 id="btn-tax-preset-ppn11"
                 onClick={() => handleApplyPresetTax("PPN_11")}
-                className="px-3 py-1.5 rounded text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition shadow-xs flex items-center gap-1"
+                className="px-3 py-1.5 rounded text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition shadow-sm flex items-center gap-1"
               >
                 <span>⚡ Standar BOS (PPN 11%)</span>
               </button>
@@ -1081,7 +1173,7 @@ export function TabIdentity({
                 type="button"
                 id="btn-tax-preset-zero"
                 onClick={() => handleApplyPresetTax("ZERO")}
-                className="px-3 py-1.5 rounded text-xs border border-border bg-card hover:bg-muted text-muted-foreground transition"
+                className="px-3 py-1.5 rounded text-xs border border-border bg-card hover:bg-muted text-foreground transition font-medium"
               >
                 <span>Bebas Pajak (PPN 0%)</span>
               </button>
@@ -1090,7 +1182,7 @@ export function TabIdentity({
                 type="button"
                 id="btn-add-custom-tax"
                 onClick={handleAddCustomTaxPolicy}
-                className="px-3 py-1.5 rounded text-xs border border-dashed border-border hover:border-primary text-muted-foreground hover:text-foreground transition flex items-center gap-1 font-mono"
+                className="px-3 py-1.5 rounded text-xs border border-dashed border-border hover:border-primary text-foreground hover:text-primary transition flex items-center gap-1 font-mono font-medium"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Tambah Baris Pajak</span>
@@ -1101,8 +1193,8 @@ export function TabIdentity({
 
         {/* Tax Policies Table */}
         {taxPolicies.length === 0 ? (
-          <div className="p-4 border border-dashed border-red-800/60 rounded-md bg-red-950/10 text-center space-y-2">
-            <p className="text-xs text-red-300 font-medium">
+          <div className="p-4 border border-dashed border-red-500/40 rounded-md bg-red-500/10 text-center space-y-2">
+            <p className="text-xs text-red-300 font-semibold">
               Belum ada kebijakan pajak yang dipilih pada snapshot revisi ini.
             </p>
             <p className="text-[11px] text-muted-foreground">
@@ -1110,9 +1202,9 @@ export function TabIdentity({
             </p>
           </div>
         ) : (
-          <div className="border border-border rounded-md overflow-hidden">
+          <div className="border border-border rounded-md overflow-hidden shadow-sm">
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/50 border-b border-border text-[10px] uppercase font-mono font-semibold text-muted-foreground">
+              <thead className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold text-slate-200">
                 <tr>
                   <th className="px-3 py-2 w-10 text-center">No</th>
                   <th className="px-3 py-2 min-w-[160px]">Jenis Pajak</th>
@@ -1177,10 +1269,10 @@ export function TabIdentity({
                       <td className="px-3 py-2">
                         {isReadOnly ? (
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium border ${
                               isWithholding
-                                ? "bg-purple-950/40 text-purple-300 border-purple-800"
-                                : "bg-emerald-950/40 text-emerald-300 border-emerald-800"
+                                ? "bg-purple-500/15 text-purple-300 border-purple-500/40"
+                                : "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
                             }`}
                           >
                             {isWithholding
@@ -1193,7 +1285,7 @@ export function TabIdentity({
                             onChange={(e) =>
                               updateTaxPolicyField(idx, "withholding_rule", e.target.value)
                             }
-                            className="w-full px-2 py-1 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-sans"
+                            className="w-full px-2 py-1 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-sans transition"
                           >
                             <option value="NONE">Ditambahkan ke Subtotal (Aditif - Beban Sekolah)</option>
                             <option value="WITHHOLD_FROM_PAYABLE">
@@ -1210,7 +1302,7 @@ export function TabIdentity({
                           <button
                             type="button"
                             onClick={() => handleRemoveTaxPolicy(idx)}
-                            className="p-1 rounded text-muted-foreground hover:text-red-400 hover:bg-red-950/20 transition"
+                            className="p-1.5 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/15 transition"
                             title="Hapus Aturan Pajak"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1328,6 +1420,15 @@ export function TabIdentity({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Create Company Modal */}
+      {showAddCompanyModal && (
+        <CreateCompanyModal
+          isOpen={showAddCompanyModal}
+          onClose={() => setShowAddCompanyModal(false)}
+          onCreated={handleCompanyCreated}
+        />
       )}
     </div>
   );

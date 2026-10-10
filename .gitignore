@@ -1,25 +1,49 @@
-# Dependencies & Environment
+# Dependencies & Virtual Environments
 node_modules/
 .pnpm-store/
+venv/
+.venv/
 backend/venv/
+backend/.venv/
+
+# Environment files
 .env
 *.env.local
+backend/.env
+frontend/.env
+frontend/.env*.local
 
-# Next.js Build
+# Build output
 frontend/.next/
 frontend/out/
+frontend/build/
 
-# Python Cache
+# Python Cache & Bytecode
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 .pytest_cache/
+backend/.pytest_cache/
 
-# Local Storage & Database
-backend/storage/artifacts/
-backend/storage/uploads/
-backend/storage/evidence/
+# Local Storage, Artifacts & Databases
+backend/storage/artifacts/*
+!backend/storage/artifacts/.gitkeep
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+backend/storage/evidence/*
+!backend/storage/evidence/.gitkeep
 backend/*.db
 backend/*.db-journal
+*.db
+*.db-journal
+
+# Scratch & logs
+scratch/
+backend/scratch/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
 
 # IDE & OS
 .vscode/

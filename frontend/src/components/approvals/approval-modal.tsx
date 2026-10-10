@@ -123,17 +123,17 @@ export function ApprovalModal({ isOpen, revision, onSuccess, onClose }: Approval
                   value={approvalNote}
                   onChange={(e) => setApprovalNote(e.target.value)}
                   placeholder="Contoh: Telah disetujui sesuai alokasi dana BOS TW II 2026."
-                  className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-sans"
+                  className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-sans transition"
                 />
               </div>
 
               {/* Mandatory Confirmation Checkbox */}
-              <label className="flex items-start gap-2.5 p-3 rounded bg-muted/40 border border-border cursor-pointer select-none">
+              <label className="flex items-start gap-2.5 p-3 rounded bg-card border border-border cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={isConfirmChecked}
                   onChange={(e) => setIsConfirmChecked(e.target.checked)}
-                  className="mt-0.5 rounded border-border text-primary focus:ring-1 focus:ring-ring"
+                  className="mt-0.5 rounded border-border text-primary focus:ring-2 focus:ring-primary/40"
                 />
                 <span className="text-[11px] text-foreground leading-snug">
                   Saya mengonfirmasi bahwa perhitungan aritmatika, kebijakan pajak, tanggal kronologis,
@@ -146,7 +146,7 @@ export function ApprovalModal({ isOpen, revision, onSuccess, onClose }: Approval
                 <button
                   type="button"
                   onClick={() => setIsRejecting(true)}
-                  className="text-red-400 hover:text-red-300 font-medium text-xs flex items-center gap-1"
+                  className="text-red-400 hover:text-red-300 font-medium text-xs flex items-center gap-1 transition"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Kembalikan untuk Koreksi</span>
@@ -156,7 +156,7 @@ export function ApprovalModal({ isOpen, revision, onSuccess, onClose }: Approval
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-3 py-1.5 text-xs rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground"
+                    className="px-3 py-1.5 text-xs rounded border border-border bg-card hover:bg-muted text-foreground transition"
                   >
                     Batal
                   </button>
@@ -164,7 +164,7 @@ export function ApprovalModal({ isOpen, revision, onSuccess, onClose }: Approval
                     type="button"
                     onClick={handleApprove}
                     disabled={!isConfirmChecked || isSubmitting}
-                    className={`flex items-center gap-1 px-4 py-1.5 text-xs font-semibold rounded transition shadow-sm ${
+                    className={`flex items-center gap-1 px-4 py-1.5 text-xs font-semibold rounded transition shadow-xs ${
                       isConfirmChecked && !isSubmitting
                         ? "bg-emerald-600 hover:bg-emerald-500 text-white"
                         : "bg-muted text-muted-foreground cursor-not-allowed"
@@ -197,7 +197,7 @@ export function ApprovalModal({ isOpen, revision, onSuccess, onClose }: Approval
                   value={returnComment}
                   onChange={(e) => setReturnComment(e.target.value)}
                   placeholder="Jelaskan bagian yang perlu diperbaiki (misal: Tanggal Berita Acara mendahului Surat Pesanan, atau harga final melebihi HPS)..."
-                  className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-sans"
+                  className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-sans transition"
                   autoFocus
                 />
               </div>
@@ -206,7 +206,7 @@ export function ApprovalModal({ isOpen, revision, onSuccess, onClose }: Approval
                 <button
                   type="button"
                   onClick={() => setIsRejecting(false)}
-                  className="px-3 py-1.5 text-xs rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground"
+                  className="px-3 py-1.5 text-xs rounded border border-border bg-card hover:bg-muted text-foreground transition"
                 >
                   Kembali ke Penyetujuan
                 </button>
@@ -214,7 +214,7 @@ export function ApprovalModal({ isOpen, revision, onSuccess, onClose }: Approval
                   type="button"
                   onClick={handleReturn}
                   disabled={isSubmitting || !returnComment.trim()}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded bg-red-600 hover:bg-red-500 text-white transition"
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded bg-red-600 hover:bg-red-500 text-white transition shadow-xs"
                 >
                   {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
                   <span>Kirim Perintah Koreksi</span>

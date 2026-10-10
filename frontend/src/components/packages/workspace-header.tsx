@@ -212,7 +212,7 @@ export function WorkspaceHeader({
             <FileCheck2 className="w-3.5 h-3.5" />
             <span>Pemeriksaan Sistem</span>
             {blockingErrorsCount > 0 && (
-              <span className="ml-1 px-1 rounded bg-red-950 text-red-400 font-mono text-[9px] border border-red-800">
+              <span className="ml-1 px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 font-mono text-[9px] border border-red-500/40 font-bold">
                 {blockingErrorsCount} BLOCK
               </span>
             )}
@@ -277,7 +277,7 @@ export function WorkspaceHeader({
               <button
                 type="button"
                 onClick={onOpenRejection}
-                className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-950/40 text-red-300 border border-red-800/80 hover:bg-red-950/70 text-[11px] font-medium transition"
+                className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/40 hover:bg-red-500/25 text-[11px] font-medium transition"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Kembalikan</span>
@@ -325,7 +325,7 @@ export function WorkspaceHeader({
               type="button"
               onClick={handleDeleteDraft}
               disabled={isDeleting}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-950/40 text-red-300 border border-red-800/80 hover:bg-red-950/70 text-[11px] font-medium transition"
+              className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/40 hover:bg-red-500/25 text-[11px] font-medium transition"
               title="Hapus draf paket pengadaan ini secara permanen"
             >
               {isDeleting ? (
@@ -342,7 +342,7 @@ export function WorkspaceHeader({
             <button
               type="button"
               onClick={onOpenCancel}
-              className="flex items-center gap-1 px-2 py-1 rounded hover:bg-red-950/30 text-muted-foreground hover:text-red-400 text-[11px] transition"
+              className="flex items-center gap-1 px-2 py-1 rounded hover:bg-red-500/15 text-muted-foreground hover:text-red-400 text-[11px] transition"
               title="Batalkan paket pengadaan ini"
             >
               <XCircle className="w-3.5 h-3.5" />
@@ -358,41 +358,41 @@ export function WorkspaceHeader({
 function StatusBadge({ status }: { status: string }) {
   if (status === "ISSUED") {
     return (
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/70 text-emerald-300 border border-emerald-800">
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
         [ 🟢 ISSUED ]
       </span>
     );
   }
   if (status === "APPROVED") {
     return (
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/40 text-emerald-400 border border-emerald-800/60">
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-teal-500/15 text-teal-300 border border-teal-500/30">
         [ 🟢 APPROVED ]
       </span>
     );
   }
   if (status === "UNDER_REVIEW") {
     return (
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950/70 text-amber-300 border border-amber-800">
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
         [ 🟡 UNDER REVIEW ]
       </span>
     );
   }
   if (status === "RETURNED") {
     return (
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-red-950/70 text-red-300 border border-red-800">
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-500/15 text-red-300 border border-red-500/30">
         [ 🔴 RETURNED ]
       </span>
     );
   }
   if (status === "CANCELLED") {
     return (
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-800 text-zinc-400 border border-zinc-700">
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-500/15 text-zinc-300 border border-zinc-500/30">
         [ ✕ CANCELLED ]
       </span>
     );
   }
   return (
-    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-muted text-muted-foreground border border-border">
+    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30">
       [ ⚪ DRAFT ]
     </span>
   );

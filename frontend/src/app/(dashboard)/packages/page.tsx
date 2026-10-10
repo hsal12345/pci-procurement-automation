@@ -119,11 +119,11 @@ function PackagesListPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Top Action Bar */}
-      <div className="h-12 border-b border-border px-4 flex items-center justify-between gap-4 bg-card/40">
+      <div className="h-12 border-b border-border px-4 flex items-center justify-between gap-4 bg-card/60">
         <div className="flex items-center gap-2">
-          <FolderKanban className="w-4 h-4 text-muted-foreground" />
-          <h1 className="text-sm font-semibold tracking-tight">Daftar Paket Pengadaan & SPJ</h1>
-          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+          <FolderKanban className="w-4 h-4 text-primary" />
+          <h1 className="text-sm font-semibold tracking-tight text-foreground">Daftar Paket Pengadaan & SPJ</h1>
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold">
             {packages.length} Paket
           </span>
         </div>
@@ -140,7 +140,7 @@ function PackagesListPage() {
           <button
             type="button"
             onClick={() => setIsImportOpen(true)}
-            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-muted/60 hover:bg-muted text-foreground transition"
+            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-card hover:bg-muted text-foreground transition"
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Impor Spreadsheet</span>
@@ -158,17 +158,17 @@ function PackagesListPage() {
 
       {/* Quick Navigation / Filter Banner for deep links */}
       {(filterParam === "inspection" || tabParam === "inspection") && latestPackage && (
-        <div className="bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-between text-xs">
+        <div className="bg-primary/10 border-b border-primary/25 px-4 py-2 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2 text-foreground">
             <CheckSquare className="w-4 h-4 text-primary" />
-            <span>Pemeriksaan Sistem & Verifikasi AI</span>
+            <span className="font-medium">Pemeriksaan Sistem & Verifikasi AI</span>
             <span className="text-muted-foreground font-mono">
               (Pilih paket di bawah atau buka paket aktif langsung)
             </span>
           </div>
           <Link
             href={`/packages/${latestPackage.id}?tab=inspection`}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium text-[11px] hover:opacity-90 transition"
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-primary-foreground font-semibold text-[11px] hover:opacity-90 transition shadow-xs"
           >
             <span>Buka Pemeriksaan ({latestPackage.package_code || latestPackage.package_number})</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -177,17 +177,17 @@ function PackagesListPage() {
       )}
 
       {(filterParam === "document" || filterParam === "documents" || tabParam === "documents") && latestPackage && (
-        <div className="bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-between text-xs">
+        <div className="bg-primary/10 border-b border-primary/25 px-4 py-2 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2 text-foreground">
             <Archive className="w-4 h-4 text-primary" />
-            <span>Arsip & Pembuatan 13 Dokumen SPJ</span>
+            <span className="font-medium">Arsip & Pembuatan 13 Dokumen SPJ</span>
             <span className="text-muted-foreground font-mono">
               (Pilih paket di bawah atau buka paket aktif langsung)
             </span>
           </div>
           <Link
             href={`/packages/${latestPackage.id}?tab=documents`}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium text-[11px] hover:opacity-90 transition"
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-primary-foreground font-semibold text-[11px] hover:opacity-90 transition shadow-xs"
           >
             <span>Buka Generator Dokumen ({latestPackage.package_code || latestPackage.package_number})</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -196,7 +196,7 @@ function PackagesListPage() {
       )}
 
       {filterParam === "under_review" && (
-        <div className="bg-amber-950/30 border-b border-amber-800/40 px-4 py-2 flex items-center justify-between text-xs">
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2 text-amber-300">
             <ShieldCheck className="w-4 h-4 text-amber-400" />
             <span className="font-medium">Filter Aktif: Paket Menunggu Persetujuan Direktur Keuangan (UNDER_REVIEW)</span>
@@ -207,7 +207,7 @@ function PackagesListPage() {
               setStatusFilter("ALL");
               router.replace("/packages");
             }}
-            className="flex items-center gap-1 text-[11px] text-amber-300/80 hover:text-amber-200"
+            className="flex items-center gap-1 text-[11px] text-amber-300 hover:text-amber-200 transition"
           >
             <X className="w-3.5 h-3.5" />
             <span>Reset Filter</span>
@@ -216,22 +216,22 @@ function PackagesListPage() {
       )}
 
       {/* Filter and Search Bar */}
-      <div className="border-b border-border/80 px-4 py-2 bg-muted/20 flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="border-b border-border px-4 py-2.5 bg-card/40 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2 flex-1 max-w-sm">
           <div className="relative w-full">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-muted-foreground" />
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
             <input
               type="text"
               placeholder="Cari kode paket, nama sekolah..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-sans"
+              className="w-full pl-8 pr-3 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-sans transition"
             />
           </div>
         </div>
 
         {/* Status Pills Filter */}
-        <div className="flex items-center gap-1 font-mono text-[11px] overflow-x-auto">
+        <div className="flex items-center gap-1.5 font-mono text-[11px] overflow-x-auto">
           {["ALL", "DRAFT", "UNDER_REVIEW", "APPROVED", "ISSUED", "CANCELLED"].map((st) => (
             <button
               key={st}
@@ -241,10 +241,10 @@ function PackagesListPage() {
                 if (st === "ALL") router.replace("/packages");
                 else router.replace(`/packages?filter=${st.toLowerCase()}`);
               }}
-              className={`px-2 py-0.5 rounded transition ${
+              className={`px-2.5 py-1 rounded transition border ${
                 statusFilter === st
-                  ? "bg-primary text-primary-foreground font-semibold"
-                  : "bg-muted/40 hover:bg-muted text-muted-foreground"
+                  ? "bg-primary text-primary-foreground font-semibold border-primary shadow-xs"
+                  : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground border-border"
               }`}
             >
               {st}
@@ -266,7 +266,7 @@ function PackagesListPage() {
             <button
               type="button"
               onClick={() => refetch()}
-              className="px-2 py-1 text-[11px] bg-muted text-foreground rounded hover:bg-muted/80"
+              className="px-2.5 py-1 text-[11px] bg-card border border-border text-foreground rounded hover:bg-muted transition"
             >
               Coba Lagi
             </button>
@@ -278,14 +278,14 @@ function PackagesListPage() {
               <button
                 type="button"
                 onClick={() => setIsCreateOpen(true)}
-                className="px-2.5 py-1 rounded bg-primary text-primary-foreground font-sans font-semibold hover:opacity-90 transition"
+                className="px-2.5 py-1 rounded bg-primary text-primary-foreground font-sans font-semibold hover:opacity-90 transition shadow-xs"
               >
                 + Buat Paket Baru Manual
               </button>
               <button
                 type="button"
                 onClick={() => setIsImportOpen(true)}
-                className="px-2.5 py-1 rounded border border-border bg-muted/40 hover:bg-muted text-foreground transition"
+                className="px-2.5 py-1 rounded border border-border bg-card hover:bg-muted text-foreground transition"
               >
                 Impor Spreadsheet
               </button>
@@ -294,19 +294,19 @@ function PackagesListPage() {
         ) : (
           <table className="w-full text-left border-collapse font-sans text-xs">
             <thead>
-              <tr className="bg-muted/40 border-b border-border text-[11px] font-medium uppercase tracking-wider text-muted-foreground font-mono">
-                <th className="px-3 py-2">Kode Paket</th>
-                <th className="px-3 py-2">Nama Sekolah / Lembaga</th>
-                <th className="px-3 py-2">TA / TW</th>
-                <th className="px-3 py-2">Sumber Dana</th>
-                <th className="px-3 py-2">Rev (Ver)</th>
-                <th className="px-3 py-2">Status Bisnis</th>
-                <th className="px-3 py-2 text-right">Nilai Transaksi (IDR)</th>
-                <th className="px-3 py-2">Tanggal</th>
-                <th className="px-3 py-2 text-center">Aksi</th>
+              <tr className="bg-muted/80 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-slate-200 font-mono shadow-xs">
+                <th className="px-3.5 py-2.5">Kode Paket</th>
+                <th className="px-3.5 py-2.5">Nama Sekolah / Lembaga</th>
+                <th className="px-3.5 py-2.5">TA / TW</th>
+                <th className="px-3.5 py-2.5">Sumber Dana</th>
+                <th className="px-3.5 py-2.5">Rev (Ver)</th>
+                <th className="px-3.5 py-2.5">Status Bisnis</th>
+                <th className="px-3.5 py-2.5 text-right">Nilai Transaksi (IDR)</th>
+                <th className="px-3.5 py-2.5">Tanggal</th>
+                <th className="px-3.5 py-2.5 text-center">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/60">
+            <tbody className="divide-y divide-border">
               {filteredPackages.map((pkg) => {
                 const latestRev = pkg.revisions?.[pkg.revisions.length - 1];
                 const status = latestRev?.status || "DRAFT";
@@ -319,42 +319,42 @@ function PackagesListPage() {
                 return (
                   <tr
                     key={pkg.id}
-                    className="hover:bg-muted/30 transition-colors group cursor-pointer"
+                    className="hover:bg-primary/5 transition-colors group cursor-pointer"
                   >
-                    <td className="px-3 py-2 font-mono font-medium text-foreground whitespace-nowrap">
+                    <td className="px-3.5 py-2.5 font-mono font-medium text-foreground whitespace-nowrap">
                       <Link
                         href={href}
-                        className="hover:text-primary hover:underline flex items-center gap-1"
+                        className="text-primary hover:underline flex items-center gap-1 font-semibold"
                       >
                         {pkg.package_code || pkg.package_number}
                       </Link>
                     </td>
-                    <td className="px-3 py-2 text-foreground font-medium truncate max-w-xs">
+                    <td className="px-3.5 py-2.5 text-foreground font-medium truncate max-w-xs">
                       {schoolName}
                     </td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">
+                    <td className="px-3.5 py-2.5 font-mono whitespace-nowrap text-muted-foreground">
                       {pkg.fiscal_year} - TW {pkg.quarter}
                     </td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap text-muted-foreground">
+                    <td className="px-3.5 py-2.5 font-mono whitespace-nowrap text-muted-foreground">
                       {pkg.fund_source}
                     </td>
-                    <td className="px-3 py-2 font-mono whitespace-nowrap">
+                    <td className="px-3.5 py-2.5 font-mono whitespace-nowrap text-slate-300">
                       Rev {latestRev?.revision_number || 1} (v{latestRev?.version || 1})
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
                       <StatusBadge status={status} />
                     </td>
-                    <td className="px-3 py-2 font-mono tabular-nums text-right font-medium text-foreground whitespace-nowrap">
+                    <td className="px-3.5 py-2.5 font-mono tabular-nums text-right font-medium text-foreground whitespace-nowrap">
                       {formatIDR(grandTotal)}
                     </td>
-                    <td className="px-3 py-2 font-mono text-muted-foreground whitespace-nowrap">
+                    <td className="px-3.5 py-2.5 font-mono text-muted-foreground whitespace-nowrap">
                       {formatShortDateIndo(pkg.created_at)}
                     </td>
-                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                    <td className="px-3.5 py-2.5 text-center whitespace-nowrap">
                       <div className="inline-flex items-center gap-1">
                         <Link
                           href={href}
-                          className="inline-flex p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded"
+                          className="inline-flex p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition"
                           title="Buka Lembar Kerja"
                         >
                           <ArrowUpRight className="w-3.5 h-3.5" />
@@ -364,7 +364,7 @@ function PackagesListPage() {
                             type="button"
                             onClick={(e) => handleDeletePackage(e, pkg)}
                             disabled={deletingId === pkg.id}
-                            className="inline-flex p-1 text-muted-foreground hover:text-destructive hover:bg-red-950/30 rounded transition"
+                            className="inline-flex p-1.5 text-muted-foreground hover:text-destructive hover:bg-red-500/10 rounded transition"
                             title="Hapus Draf Pengadaan"
                           >
                             {deletingId === pkg.id ? (
@@ -410,41 +410,41 @@ function PackagesListPage() {
 function StatusBadge({ status }: { status: string }) {
   if (status === "ISSUED") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-950/60 text-emerald-300 border border-emerald-800">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">
         [ 🟢 TERBIT / ISSUED ]
       </span>
     );
   }
   if (status === "APPROVED") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-950/40 text-emerald-400 border border-emerald-800/60">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">
         [ 🟢 DISETUJUI ]
       </span>
     );
   }
   if (status === "UNDER_REVIEW") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-950/60 text-amber-300 border border-amber-800">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/40">
         [ 🟡 DALAM TINJAUAN ]
       </span>
     );
   }
   if (status === "RETURNED") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-red-950/60 text-red-300 border border-red-800">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-red-500/15 text-red-300 border border-red-500/40">
         [ 🔴 DIKEMBALIKAN ]
       </span>
     );
   }
   if (status === "CANCELLED") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-700/50 text-slate-300 border border-slate-600/60">
         [ ✕ DIBATALKAN ]
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-muted text-muted-foreground border border-border">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-muted text-slate-300 border border-border">
       [ ⚪ DRAF ]
     </span>
   );

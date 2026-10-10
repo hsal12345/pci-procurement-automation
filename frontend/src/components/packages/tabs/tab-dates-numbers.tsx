@@ -241,7 +241,7 @@ export function TabDatesNumbers({ revision, isReadOnly, onDataChanged }: TabDate
       D13: { number: `13/BAST-PCI/${year}`, issuer: "COMPANY" },
     };
 
-    let updatedNumbers = [...numbers];
+    const updatedNumbers = [...numbers];
 
     Object.entries(defaultNumbersMap).forEach(([docCode, def]) => {
       const idx = updatedNumbers.findIndex((n) => n.doc_code === docCode);
@@ -311,14 +311,14 @@ export function TabDatesNumbers({ revision, isReadOnly, onDataChanged }: TabDate
         {(autoDateNotice || autoNumberNotice) && (
           <div className="flex flex-wrap gap-2 pt-2 border-t border-border/40 text-[11px] font-mono">
             {autoDateNotice && (
-              <span className="px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
+              <span className="px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 {autoDateNotice}
               </span>
             )}
             {autoNumberNotice && (
-              <span className="px-2 py-0.5 rounded bg-sky-950/40 text-sky-300 border border-sky-800 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
+              <span className="px-2.5 py-1 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 flex items-center gap-1.5 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" />
                 {autoNumberNotice}
               </span>
             )}
@@ -327,31 +327,31 @@ export function TabDatesNumbers({ revision, isReadOnly, onDataChanged }: TabDate
       </div>
 
       {/* Timeline Warning Explanation */}
-      <div className="border border-border/80 rounded bg-muted/20 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <span className="font-mono text-muted-foreground flex items-center gap-1.5">
+      <div className="border border-border rounded bg-muted/40 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="font-mono text-muted-foreground flex items-center gap-1.5 font-medium">
           <Calendar className="w-3.5 h-3.5 text-primary flex-shrink-0" />
           <span>
             Urutan Kronologis Resmi (BR07): [HPS/SPP] ≤ Penawaran ≤ Negosiasi ≤ Pesanan ≤ Surat Jalan ≤ BAPB ≤ BAST ≤ BAPP ≤ [Faktur & Kwitansi]
           </span>
         </span>
-        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800">
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
           13 Dokumen Lengkap (D01-D13)
         </span>
       </div>
 
       {/* Chronological Table */}
-      <div className="border border-border rounded-lg bg-card overflow-hidden">
+      <div className="border border-border rounded-lg bg-card overflow-hidden shadow-sm">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="bg-muted/50 border-b border-border text-[10px] uppercase font-mono font-semibold tracking-wider text-muted-foreground">
-              <th className="px-3 py-2 w-10 text-center">Urutan</th>
-              <th className="px-3 py-2 min-w-[220px]">Dokumen / Peristiwa Siklus</th>
-              <th className="px-3 py-2 w-48">Tanggal Terpilih</th>
-              <th className="px-3 py-2 min-w-[200px]">Nomor Dokumen</th>
-              <th className="px-3 py-2 w-28 text-center">Penerbit</th>
+            <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-slate-200">
+              <th className="px-3 py-2.5 w-10 text-center">Urutan</th>
+              <th className="px-3 py-2.5 min-w-[220px]">Dokumen / Peristiwa Siklus</th>
+              <th className="px-3 py-2.5 w-48">Tanggal Terpilih</th>
+              <th className="px-3 py-2.5 min-w-[200px]">Nomor Dokumen</th>
+              <th className="px-3 py-2.5 w-28 text-center">Penerbit</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/60 font-mono text-[11px]">
+          <tbody className="divide-y divide-border font-mono text-[11px]">
             {EVENT_ORDER.map((item, idx) => {
               const currentDate = getDate(item.code);
               const prevItem = idx > 0 ? EVENT_ORDER[idx - 1] : null;
@@ -368,8 +368,8 @@ export function TabDatesNumbers({ revision, isReadOnly, onDataChanged }: TabDate
               return (
                 <tr
                   key={item.code}
-                  className={`hover:bg-muted/20 transition-colors ${
-                    isInverted ? "bg-red-950/20" : ""
+                  className={`hover:bg-primary/5 transition-colors ${
+                    isInverted ? "bg-red-500/10" : ""
                   }`}
                 >
                   {/* Sequence # */}
@@ -397,12 +397,12 @@ export function TabDatesNumbers({ revision, isReadOnly, onDataChanged }: TabDate
                         value={currentDate}
                         min={prevDate || undefined}
                         onChange={(e) => handleDateChange(item.code, e.target.value)}
-                        className={`w-full px-2 py-1 bg-background border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono tabular-nums ${
-                          isInverted ? "border-red-500 text-red-400 font-bold" : "border-border text-foreground"
+                        className={`w-full px-2.5 py-1.5 bg-background border rounded text-xs outline-none focus:ring-2 focus:ring-primary font-mono tabular-nums ${
+                          isInverted ? "border-red-500 text-red-300 font-bold" : "border-border text-foreground"
                         }`}
                       />
                       {isInverted && (
-                        <div className="text-[10px] text-red-400 font-sans flex items-center gap-1">
+                        <div className="text-[10px] text-red-300 font-sans flex items-center gap-1 font-semibold">
                           <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                           <span>Mendahului {prevItem?.name}</span>
                         </div>
@@ -425,14 +425,14 @@ export function TabDatesNumbers({ revision, isReadOnly, onDataChanged }: TabDate
                         value={docNum?.doc_number || ""}
                         onChange={(e) => handleNumberChange(item.doc_code, e.target.value, item.issuer)}
                         placeholder={`Contoh: ${item.doc_code === "D03" ? "03/SPN-PCI/2026" : `Nomor ${item.doc_code}`}`}
-                        className={`w-full px-2 py-1 bg-background border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono ${
+                        className={`w-full px-2.5 py-1.5 bg-background border rounded text-xs outline-none focus:ring-2 focus:ring-primary font-mono ${
                           isCompanyGenerated
-                            ? "border-purple-800/40 text-purple-200 focus:border-purple-600"
+                            ? "border-purple-500/40 text-purple-200 focus:border-purple-400"
                             : "border-border text-foreground"
                         }`}
                       />
                       {isCompanyGenerated && (
-                        <span className="text-[9px] font-mono text-purple-400 px-1 py-0.5 rounded bg-purple-950/40 border border-purple-800 flex-shrink-0">
+                        <span className="text-[9px] font-mono text-purple-300 px-1.5 py-0.5 rounded bg-purple-500/15 border border-purple-500/30 flex-shrink-0 font-bold">
                           REKANAN
                         </span>
                       )}
@@ -442,12 +442,12 @@ export function TabDatesNumbers({ revision, isReadOnly, onDataChanged }: TabDate
                   {/* Issuer Badge */}
                   <td className="px-3 py-2 text-center">
                     <span
-                      className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                      className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border ${
                         item.issuer === "COMPANY"
-                          ? "bg-purple-950/60 text-purple-300 border-purple-800"
+                          ? "bg-purple-500/15 text-purple-300 border-purple-500/30"
                           : item.issuer === "SCHOOL"
-                          ? "bg-sky-950/60 text-sky-300 border-sky-800"
-                          : "bg-zinc-800 text-zinc-300 border-zinc-700"
+                          ? "bg-sky-500/15 text-sky-300 border-sky-500/30"
+                          : "bg-zinc-500/15 text-zinc-300 border-zinc-500/30"
                       }`}
                     >
                       {item.issuer}

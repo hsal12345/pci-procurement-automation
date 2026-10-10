@@ -378,33 +378,33 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
       <div className="flex-1 overflow-auto">
         <table className="w-full text-left border-collapse font-sans text-xs">
           <thead>
-            <tr className="bg-muted/50 border-b border-border text-[10px] uppercase font-mono font-semibold tracking-wider text-muted-foreground sticky top-0 z-10 select-none">
-              <th className="px-2 py-1.5 w-10 text-center border-r border-border">No</th>
-              <th className="px-2 py-1.5 min-w-[200px] border-r border-border">Deskripsi Barang</th>
-              <th className="px-2 py-1.5 min-w-[140px] border-r border-border">Spesifikasi</th>
-              <th className="px-2 py-1.5 w-16 text-right border-r border-border">Vol</th>
-              <th className="px-2 py-1.5 w-16 text-center border-r border-border">Satuan</th>
-              <th className="px-2 py-1.5 w-28 text-right border-r border-border">Harga HPS</th>
-              <th className="px-2 py-1.5 w-28 text-right border-r border-border">Harga Penawaran</th>
-              <th className="px-2 py-1.5 w-28 text-right border-r border-border">Harga Final</th>
-              <th className="px-2 py-1.5 w-16 text-right border-r border-border">Diskon (%)</th>
-              <th className="px-2 py-1.5 w-32 text-right border-r border-border">Total Akhir</th>
-              {!isReadOnly && <th className="px-2 py-1.5 w-8 text-center">✕</th>}
+            <tr className="bg-muted/90 backdrop-blur border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-slate-200 sticky top-0 z-10 select-none shadow-sm">
+              <th className="px-1.5 py-2 w-8 text-center border-r border-border">No</th>
+              <th className="px-2.5 py-2 min-w-[200px] border-r border-border">Deskripsi Barang</th>
+              <th className="px-2.5 py-2 min-w-[140px] border-r border-border">Spesifikasi</th>
+              <th className="px-2.5 py-2 w-16 text-right border-r border-border">Vol</th>
+              <th className="px-2.5 py-2 w-16 text-center border-r border-border">Satuan</th>
+              <th className="px-2.5 py-2 w-28 text-right border-r border-border">Harga HPS</th>
+              <th className="px-2.5 py-2 w-28 text-right border-r border-border">Harga Penawaran</th>
+              <th className="px-2.5 py-2 w-28 text-right border-r border-border">Harga Final</th>
+              <th className="px-2.5 py-2 w-16 text-right border-r border-border">Diskon (%)</th>
+              <th className="px-2.5 py-2 w-32 text-right border-r border-border">Total Akhir</th>
+              {!isReadOnly && <th className="px-2.5 py-2 w-8 text-center">✕</th>}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/60 font-mono text-[11px]">
+          <tbody className="divide-y divide-border font-mono text-[11px]">
             {lines.map((line, idx) => {
               const isZeroPrice = line.final_unit_price === 0;
 
               return (
                 <tr
                   key={line.id || `line-${idx}`}
-                  className={`hover:bg-muted/20 transition-colors ${
-                    isZeroPrice ? "bg-amber-950/10" : ""
+                  className={`hover:bg-muted/40 transition-colors ${
+                    isZeroPrice ? "bg-amber-500/10" : ""
                   }`}
                 >
                   {/* Row No */}
-                  <td className="px-2 py-1 text-center font-bold text-muted-foreground border-r border-border/80">
+                  <td className="px-1.5 py-1 text-center font-bold text-muted-foreground border-r border-border w-8">
                     {line.line_number}
                   </td>
 
@@ -497,8 +497,8 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
                       onChange={(e) => handleCellChange(idx, "final_unit_price", e.target.value)}
                       onKeyDown={(e) => handleKeyDown(e, idx, "final_unit_price")}
                       onBlur={() => handleBlur(idx, "final_unit_price")}
-                      className={`w-full h-8 px-2 py-1 text-right bg-transparent tabular-nums font-bold outline-none focus:ring-1 focus:ring-ring focus:bg-accent/40 font-mono ${
-                        isZeroPrice ? "text-amber-400 bg-amber-950/20" : "text-foreground"
+                      className={`w-full h-8 px-2 py-1 text-right bg-transparent tabular-nums font-bold outline-none focus:ring-2 focus:ring-primary/40 focus:bg-primary/5 font-mono ${
+                        isZeroPrice ? "text-amber-300 bg-amber-500/15" : "text-foreground"
                       }`}
                     />
                     {isZeroPrice && (
@@ -549,12 +549,12 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
       </div>
 
       {/* Financial Recap Table (Server-Authoritative & Decimal Protected) */}
-      <div className="border-t border-border bg-muted/30 p-4 font-mono select-none">
-        <div className="max-w-4xl ml-auto space-y-1.5 text-xs">
+      <div className="border-t border-border bg-card p-4 font-mono select-none shadow-sm">
+        <div className="max-w-4xl ml-auto space-y-2 text-xs">
           {/* Subtotal */}
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground uppercase text-[11px]">Subtotal (Nilai Barang Bersih):</span>
-            <span className="font-bold tabular-nums text-foreground">{formatIDR(computedSubtotal)}</span>
+            <span className="text-muted-foreground uppercase text-[11px] font-medium">Subtotal (Nilai Barang Bersih):</span>
+            <span className="font-bold tabular-nums text-foreground text-sm">{formatIDR(computedSubtotal)}</span>
           </div>
 
           {/* Tax Breakdown */}
@@ -563,23 +563,23 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
               <span className="text-muted-foreground">
                 Pajak {td.tax_type} ({td.rate}%):
               </span>
-              <span className="font-medium tabular-nums text-foreground">{formatIDR(td.amount)}</span>
+              <span className="font-semibold tabular-nums text-foreground">{formatIDR(td.amount)}</span>
             </div>
           ))}
 
           {/* Grand Total */}
-          <div className="flex items-center justify-between pt-1.5 border-t border-border text-sm">
+          <div className="flex items-center justify-between pt-2 border-t border-border text-sm">
             <span className="font-bold text-foreground uppercase tracking-wide">
               Grand Total (Termasuk PPN):
             </span>
-            <span className="font-bold tabular-nums text-foreground text-base text-emerald-400">
+            <span className="font-bold tabular-nums text-base text-emerald-300">
               {formatIDR(computedGrandTotal)}
             </span>
           </div>
 
           {/* Terbilang String */}
-          <div className="pt-1 text-[11px] text-muted-foreground font-sans italic">
-            <span className="font-semibold text-foreground font-mono not-italic uppercase text-[10px] mr-1">
+          <div className="pt-1.5 text-[11px] text-muted-foreground font-sans italic border-t border-border/60">
+            <span className="font-semibold text-foreground font-mono not-italic uppercase text-[10px] mr-1.5">
               Terbilang:
             </span>
             &quot;{computedTerbilang}&quot;

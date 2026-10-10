@@ -269,16 +269,81 @@ export const apiClient = {
     email?: string;
     phone?: string;
     subdistrict?: string;
+    postal_code?: string;
+    city?: string;
   }) =>
     request<any>("/api/v1/masters/schools", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
+  updateSchool: (
+    id: string,
+    payload: {
+      name?: string;
+      npsn?: string;
+      level?: string;
+      address?: string;
+      subdistrict?: string;
+      city?: string;
+      postal_code?: string;
+      phone?: string;
+      email?: string;
+      letterhead_path?: string;
+      is_active?: boolean;
+    }
+  ) =>
+    request<any>(`/api/v1/masters/schools/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  uploadSchoolLetterhead: (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request<any>(`/api/v1/masters/schools/${id}/letterhead`, {
+      method: "POST",
+      body: formData,
+    });
+  },
+
   getCompanies: () => request<any[]>("/api/v1/masters/companies"),
 
   createCompany: (payload: any) =>
     request<any>("/api/v1/masters/companies", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateCompany: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/companies/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  uploadCompanyLogo: (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request<any>(`/api/v1/masters/companies/${id}/logo`, {
+      method: "POST",
+      body: formData,
+    });
+  },
+
+  getCompanyOfficials: (companyId: string) =>
+    request<any[]>(`/api/v1/masters/companies/${companyId}/officials`),
+
+  createCompanyOfficial: (
+    companyId: string,
+    payload: {
+      role?: string;
+      role_title?: string;
+      person_name: string;
+      nip?: string;
+      position_sk_number?: string;
+    }
+  ) =>
+    request<any>(`/api/v1/masters/companies/${companyId}/officials`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -292,12 +357,36 @@ export const apiClient = {
       role: string;
       person_name: string;
       nip?: string;
+      position_sk_number?: string;
       valid_from?: string;
     }
   ) =>
     request<any>(`/api/v1/masters/schools/${schoolId}/officials`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+
+  updateSchoolOfficial: (
+    schoolId: string,
+    officialId: string,
+    payload: {
+      role?: string;
+      person_name?: string;
+      nip?: string;
+      position_sk_number?: string;
+      valid_from?: string;
+      valid_to?: string;
+      is_active?: boolean;
+    }
+  ) =>
+    request<any>(`/api/v1/masters/schools/${schoolId}/officials/${officialId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteSchoolOfficial: (schoolId: string, officialId: string) =>
+    request<any>(`/api/v1/masters/schools/${schoolId}/officials/${officialId}`, {
+      method: "DELETE",
     }),
 
   getTaxPolicies: () => request<any[]>("/api/v1/masters/tax-policies"),

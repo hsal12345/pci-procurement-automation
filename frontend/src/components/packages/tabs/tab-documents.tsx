@@ -121,14 +121,14 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
 
       {/* Watermark Notice Banner for Drafts */}
       {isDraft && (
-        <div className="border border-amber-800/80 bg-amber-950/30 p-3 rounded-lg flex items-center justify-between text-amber-300 font-mono text-xs">
+        <div className="border border-amber-500/40 bg-amber-500/10 p-3 rounded-lg flex items-center justify-between text-amber-300 font-mono text-xs shadow-xs">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
             <span>
               STATUS REVISI MASIH DRAF: Dokumen Word & PDF dicetak dengan tanda air watermark &quot;DRAFT / TIDAK RESMI&quot;.
             </span>
           </div>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 border border-amber-800 font-bold">
+          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold">
             WATERMARK AKTIF
           </span>
         </div>
@@ -138,16 +138,16 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
       <div className="border border-border rounded-lg bg-card overflow-hidden">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="bg-muted/40 border-b border-border text-[10px] uppercase font-mono font-semibold tracking-wider text-muted-foreground">
-              <th className="px-3 py-2 w-16">Kode</th>
-              <th className="px-3 py-2 min-w-[240px]">Nama Dokumen Resmi</th>
-              <th className="px-3 py-2 w-28">Tahap Harga</th>
-              <th className="px-3 py-2 w-28">Status Berkas</th>
-              <th className="px-3 py-2 w-36 text-center">Unduh Berkas</th>
-              <th className="px-3 py-2 w-24 text-center">Pratinjau</th>
+            <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-slate-200">
+              <th className="px-3 py-2.5 w-16">Kode</th>
+              <th className="px-3 py-2.5 min-w-[240px]">Nama Dokumen Resmi</th>
+              <th className="px-3 py-2.5 w-28">Tahap Harga</th>
+              <th className="px-3 py-2.5 w-28">Status Berkas</th>
+              <th className="px-3 py-2.5 w-36 text-center">Unduh Berkas</th>
+              <th className="px-3 py-2.5 w-24 text-center">Pratinjau</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/60 font-mono text-[11px]">
+          <tbody className="divide-y divide-border font-mono text-[11px]">
             {DOC_REGISTRY.map((doc) => {
               const docxArt = getArtifactForCode(doc.code, "DOCX");
               const pdfArt = getArtifactForCode(doc.code, "PDF");
@@ -157,7 +157,7 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
               const hasGenerated = docxArt || pdfArt || xlsxArt || zipArt;
 
               return (
-                <tr key={doc.code} className="hover:bg-muted/20 transition-colors">
+                <tr key={doc.code} className="hover:bg-muted/30 transition-colors">
                   <td className="px-3 py-2 font-bold text-foreground">{doc.code}</td>
                   <td className="px-3 py-2 font-sans font-medium text-foreground">
                     {doc.name}
@@ -165,19 +165,21 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
                   <td className="px-3 py-2 text-muted-foreground text-[10px]">{doc.stage}</td>
                   <td className="px-3 py-2">
                     {hasGenerated ? (
-                      <span className="text-emerald-400 font-bold text-[10px]">● Tersedia</span>
+                      <span className="text-emerald-300 font-bold text-[10px] inline-flex items-center gap-1">
+                        ● Tersedia
+                      </span>
                     ) : (
                       <span className="text-muted-foreground text-[10px]">○ Belum Dibuat</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <div className="flex items-center justify-center gap-1">
+                    <div className="flex items-center justify-center gap-1.5">
                       {docxArt && (
                         <a
                           href={`/api/v1/artifacts/${docxArt.id}/download`}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-1.5 py-0.5 rounded bg-blue-950/60 hover:bg-blue-900 text-blue-300 border border-blue-800 text-[10px] font-bold"
+                          className="px-2 py-0.5 rounded bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-[10px] font-bold transition"
                           title="Unduh DOCX"
                         >
                           DOCX
@@ -188,7 +190,7 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
                           href={`/api/v1/artifacts/${pdfArt.id}/download`}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-1.5 py-0.5 rounded bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800 text-[10px] font-bold"
+                          className="px-2 py-0.5 rounded bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30 text-[10px] font-bold transition"
                           title="Unduh PDF"
                         >
                           PDF
@@ -199,7 +201,7 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
                           href={`/api/v1/artifacts/${xlsxArt.id}/download`}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-1.5 py-0.5 rounded bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-[10px] font-bold"
+                          className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold transition"
                           title="Unduh Excel"
                         >
                           XLSX
@@ -210,7 +212,7 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
                           href={`/api/v1/artifacts/${zipArt.id}/download`}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-1.5 py-0.5 rounded bg-purple-950/60 hover:bg-purple-900 text-purple-300 border border-purple-800 text-[10px] font-bold"
+                          className="px-2 py-0.5 rounded bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-[10px] font-bold transition"
                           title="Unduh ZIP Manifest"
                         >
                           ZIP
@@ -245,7 +247,7 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
               <span className="font-semibold text-foreground flex items-center gap-2">
                 <FileText className="w-4 h-4 text-red-400" /> Pratinjau Berkas PDF
                 {isDraft && (
-                  <span className="text-[10px] text-amber-400 px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800">
+                  <span className="text-[10px] text-amber-300 px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 font-bold">
                     DRAFT WATERMARK
                   </span>
                 )}

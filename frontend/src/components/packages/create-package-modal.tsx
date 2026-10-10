@@ -34,6 +34,7 @@ export function CreatePackageModal({
 
   // Form states
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
   const [fiscalYear, setFiscalYear] = useState<number>(2026);
   const [quarter, setQuarter] = useState<number>(2);
   const [fundSource, setFundSource] = useState<string>("BOS_REGULER");
@@ -65,6 +66,9 @@ export function CreatePackageModal({
         setCompanies(companiesData || []);
         if (schoolsData && schoolsData.length > 0) {
           setSelectedSchoolId(schoolsData[0].id);
+        }
+        if (companiesData && companiesData.length > 0) {
+          setSelectedCompanyId(companiesData[0].id);
         }
       } catch (err: any) {
         setErrorMsg("Gagal memuat master data sekolah.");
@@ -117,6 +121,9 @@ export function CreatePackageModal({
         fiscal_year: fiscalYear,
         quarter: quarter,
       };
+      if (selectedCompanyId) {
+        payload.company_id = selectedCompanyId;
+      }
       if (customPackageNumber.trim()) {
         payload.package_number = customPackageNumber.trim();
       }
@@ -156,7 +163,7 @@ export function CreatePackageModal({
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto text-xs">
           {errorMsg && (
-            <div className="p-3 bg-red-950/30 border border-red-800 text-red-300 rounded flex items-center gap-2">
+            <div className="p-3 bg-red-500/15 border border-red-500/40 text-red-300 rounded-md flex items-center gap-2 shadow-xs">
               <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400" />
               <span>{errorMsg}</span>
             </div>
@@ -263,6 +270,32 @@ export function CreatePackageModal({
             )}
           </div>
 
+          {/* 1.5. Company Selector (Rekanan Penyedia) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5 text-foreground font-semibold">
+              <Landmark className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Badan Usaha Rekanan (Penyedia)</span>
+            </div>
+            <select
+              value={selectedCompanyId}
+              disabled={isLoadingMasters || companies.length === 0}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-sans"
+            >
+              {isLoadingMasters ? (
+                <option value="">Memuat daftar rekanan...</option>
+              ) : companies.length === 0 ? (
+                <option value="">Belum ada rekanan di database</option>
+              ) : (
+                companies.map((cp) => (
+                  <option key={cp.id} value={cp.id}>
+                    {cp.legal_name || cp.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
           {/* 2. Fiscal Year & Quarter */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -349,7 +382,7 @@ export function CreatePackageModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 text-xs rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground"
+              className="px-3 py-1.5 text-xs rounded border border-border bg-card hover:bg-muted text-foreground transition"
             >
               Batal
             </button>

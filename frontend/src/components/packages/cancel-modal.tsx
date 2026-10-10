@@ -33,20 +33,20 @@ export function CancelModal({ isOpen, packageCode, onConfirm, onClose }: CancelM
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
-      <div className="bg-card border border-red-800/80 w-full max-w-md rounded-lg shadow-2xl overflow-hidden font-sans">
-        <div className="px-4 py-3 bg-red-950/40 border-b border-red-800/80 flex items-center justify-between">
+      <div className="bg-card border border-red-500/40 w-full max-w-md rounded-lg shadow-2xl overflow-hidden font-sans">
+        <div className="px-4 py-3 bg-red-500/15 border-b border-red-500/30 flex items-center justify-between">
           <div className="flex items-center gap-2 text-red-300 font-mono text-xs font-bold uppercase">
             <XCircle className="w-4 h-4 text-red-400" />
             <span>Batalkan Paket Pengadaan</span>
           </div>
-          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground">
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-foreground transition">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-3 text-xs">
           <p className="text-foreground leading-relaxed">
-            Apakah Anda yakin ingin membatalkan paket <span className="font-mono font-bold">{packageCode}</span>?
+            Apakah Anda yakin ingin membatalkan paket <span className="font-mono font-bold text-primary">{packageCode}</span>?
             Tindakan ini akan mengunci transaksi dan melepaskan nomor reservasi dokumen.
           </p>
 
@@ -59,7 +59,7 @@ export function CancelModal({ isOpen, packageCode, onConfirm, onClose }: CancelM
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Contoh: Alokasi anggaran sekolah dibatalkan oleh dinas pendidikan..."
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-sans"
+              className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-sans transition"
               autoFocus
             />
           </div>
@@ -68,7 +68,7 @@ export function CancelModal({ isOpen, packageCode, onConfirm, onClose }: CancelM
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 text-xs rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground"
+              className="px-3 py-1.5 text-xs rounded border border-border bg-card hover:bg-muted text-foreground transition"
             >
               Kembali
             </button>

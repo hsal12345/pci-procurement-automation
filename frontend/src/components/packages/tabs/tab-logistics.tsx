@@ -168,7 +168,7 @@ export function TabLogistics({
     <div className="p-6 max-w-5xl space-y-6 text-xs font-sans">
       {/* Pilot Boundary Stop Warning Banner (Finding #5) */}
       {hasDispute && (
-        <div className="border border-amber-500/80 bg-amber-950/40 p-4 rounded-lg flex items-start gap-3 text-amber-200">
+        <div className="border border-amber-500/40 bg-amber-500/10 p-4 rounded-lg flex items-start gap-3 text-amber-200 shadow-xs">
           <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="space-y-1">
             <h4 className="font-bold text-amber-300 font-mono uppercase tracking-wider text-xs">
@@ -290,16 +290,16 @@ export function TabLogistics({
 
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="bg-muted/30 border-b border-border text-[10px] uppercase font-mono font-semibold tracking-wider text-muted-foreground">
-              <th className="px-3 py-2 w-10 text-center">No</th>
-              <th className="px-3 py-2 min-w-[200px]">Deskripsi Barang</th>
-              <th className="px-3 py-2 w-24 text-right">Vol Pesanan</th>
-              <th className="px-3 py-2 w-28 text-right">Vol Diterima</th>
-              <th className="px-3 py-2 w-32 text-center">Kondisi Fisik</th>
-              <th className="px-3 py-2 min-w-[150px]">Catatan Serah Terima</th>
+            <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-slate-200">
+              <th className="px-3 py-2.5 w-10 text-center">No</th>
+              <th className="px-3 py-2.5 min-w-[200px]">Deskripsi Barang</th>
+              <th className="px-3 py-2.5 w-24 text-right">Vol Pesanan</th>
+              <th className="px-3 py-2.5 w-28 text-right">Vol Diterima</th>
+              <th className="px-3 py-2.5 w-32 text-center">Kondisi Fisik</th>
+              <th className="px-3 py-2.5 min-w-[150px]">Catatan Serah Terima</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/60 font-mono text-[11px]">
+          <tbody className="divide-y divide-border font-mono text-[11px]">
             {lines.map((line, idx) => {
               const isDamaged = line.condition === "RUSAK";
               const isPartial =
@@ -310,8 +310,8 @@ export function TabLogistics({
               return (
                 <tr
                   key={line.id || `line-${idx}`}
-                  className={`hover:bg-muted/20 transition-colors ${
-                    isDamaged || isPartial ? "bg-amber-950/20" : ""
+                  className={`hover:bg-muted/30 transition-colors ${
+                    isDamaged || isPartial ? "bg-amber-500/10" : ""
                   }`}
                 >
                   <td className="px-3 py-2 text-center text-muted-foreground font-bold">
@@ -320,7 +320,7 @@ export function TabLogistics({
                   <td className="px-3 py-2 font-sans font-medium text-foreground">
                     {line.confirmed_description || line.original_description}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                  <td className="px-3 py-2 text-right tabular-nums text-foreground font-medium">
                     {formatQuantity(line.quantity)} {line.unit}
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -335,7 +335,7 @@ export function TabLogistics({
                           : Number(line.quantity)
                       }
                       onChange={(e) => handleReceivedQtyChange(idx, parseFloat(e.target.value) || 0)}
-                      className="w-16 px-1.5 py-0.5 text-right bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono tabular-nums"
+                      className="w-16 px-1.5 py-0.5 text-right bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary font-mono tabular-nums text-foreground"
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
@@ -343,10 +343,10 @@ export function TabLogistics({
                       type="button"
                       disabled={isReadOnly}
                       onClick={() => handleConditionToggle(idx)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase transition border ${
+                      className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase transition border ${
                         line.condition === "BAIK" || !line.condition
-                          ? "bg-emerald-950/60 text-emerald-300 border-emerald-800 hover:bg-emerald-950"
-                          : "bg-red-950/80 text-red-300 border-red-800 hover:bg-red-950"
+                          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25"
+                          : "bg-red-500/15 text-red-300 border-red-500/30 hover:bg-red-500/25"
                       }`}
                     >
                       {line.condition === "BAIK" || !line.condition ? "✓ BAIK" : "✕ RUSAK"}

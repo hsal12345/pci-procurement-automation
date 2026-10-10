@@ -91,49 +91,49 @@ export function TabInspection({
       {/* 1. Metric Cards Header */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         {/* BLOCK */}
-        <div className="border border-red-800/80 bg-red-950/30 p-3.5 rounded-lg flex items-center justify-between">
+        <div className="border border-red-500/30 bg-red-500/10 p-4 rounded-lg flex items-center justify-between shadow-sm">
           <div>
-            <span className="text-[10px] font-mono uppercase tracking-wider text-red-400 font-bold block">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-red-300 font-bold block">
               Kesalahan Memblokir
             </span>
-            <span className="text-2xl font-mono font-bold text-red-300 tabular-nums">
+            <span className="text-2xl font-mono font-bold text-red-200 tabular-nums">
               {blockCount}
             </span>
-            <span className="text-[10px] text-red-400/80 block mt-0.5">Wajib Diperbaiki</span>
+            <span className="text-[10px] text-red-300/80 block mt-0.5">Wajib Diperbaiki</span>
           </div>
           <AlertOctagon className="w-6 h-6 text-red-400" />
         </div>
 
         {/* WARNING */}
-        <div className="border border-amber-800/80 bg-amber-950/30 p-3.5 rounded-lg flex items-center justify-between">
+        <div className="border border-amber-500/30 bg-amber-500/10 p-4 rounded-lg flex items-center justify-between shadow-sm">
           <div>
-            <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold block">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300 font-bold block">
               Peringatan (Warnings)
             </span>
-            <span className="text-2xl font-mono font-bold text-amber-300 tabular-nums">
+            <span className="text-2xl font-mono font-bold text-amber-200 tabular-nums">
               {warningCount}
             </span>
-            <span className="text-[10px] text-amber-400/80 block mt-0.5">Dapat Didisposisi</span>
+            <span className="text-[10px] text-amber-300/80 block mt-0.5">Dapat Didisposisi</span>
           </div>
           <AlertTriangle className="w-6 h-6 text-amber-400" />
         </div>
 
         {/* INFO */}
-        <div className="border border-sky-800/80 bg-sky-950/30 p-3.5 rounded-lg flex items-center justify-between">
+        <div className="border border-sky-500/30 bg-sky-500/10 p-4 rounded-lg flex items-center justify-between shadow-sm">
           <div>
-            <span className="text-[10px] font-mono uppercase tracking-wider text-sky-400 font-bold block">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-sky-300 font-bold block">
               Informasi Tambahan
             </span>
-            <span className="text-2xl font-mono font-bold text-sky-300 tabular-nums">
+            <span className="text-2xl font-mono font-bold text-sky-200 tabular-nums">
               {infoCount}
             </span>
-            <span className="text-[10px] text-sky-400/80 block mt-0.5">Catatan Sistem</span>
+            <span className="text-[10px] text-sky-300/80 block mt-0.5">Catatan Sistem</span>
           </div>
           <Info className="w-6 h-6 text-sky-400" />
         </div>
 
         {/* AI STATUS */}
-        <div className="border border-border bg-card p-3.5 rounded-lg flex items-center justify-between">
+        <div className="border border-border bg-card p-4 rounded-lg flex items-center justify-between shadow-sm">
           <div>
             <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground font-bold block">
               Status Review Teks AI
@@ -203,15 +203,15 @@ export function TabInspection({
         ) : (
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-muted/30 border-b border-border text-[10px] uppercase font-mono font-semibold tracking-wider text-muted-foreground">
-                <th className="px-3 py-2 w-28">Tingkat</th>
-                <th className="px-3 py-2 w-24">Aturan</th>
-                <th className="px-3 py-2 min-w-[200px]">Deskripsi Temuan & Pesan</th>
-                <th className="px-3 py-2 w-48">Koordinat Sumber</th>
-                <th className="px-3 py-2 w-28 text-center">Aksi</th>
+              <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-slate-200">
+                <th className="px-3 py-2.5 w-28">Tingkat</th>
+                <th className="px-3 py-2.5 w-24">Aturan</th>
+                <th className="px-3 py-2.5 min-w-[200px]">Deskripsi Temuan & Pesan</th>
+                <th className="px-3 py-2.5 w-48">Koordinat Sumber</th>
+                <th className="px-3 py-2.5 w-28 text-center">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/60 font-mono text-[11px]">
+            <tbody className="divide-y divide-border font-mono text-[11px]">
               {findings.map((finding) => {
                 const isBlock = finding.severity === "BLOCK";
                 const isWarning = finding.severity === "WARNING";
@@ -219,22 +219,22 @@ export function TabInspection({
                 return (
                   <tr
                     key={finding.id}
-                    className={`hover:bg-muted/20 transition-colors ${
-                      isBlock ? "bg-red-950/10" : isWarning ? "bg-amber-950/10" : ""
+                    className={`hover:bg-muted/30 transition-colors ${
+                      isBlock ? "bg-red-500/10" : isWarning ? "bg-amber-500/10" : ""
                     }`}
                   >
                     {/* Severity Badge */}
                     <td className="px-3 py-2 whitespace-nowrap">
                       {isBlock ? (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-950 text-red-300 border border-red-800">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/15 text-red-300 border border-red-500/30">
                           [ 🔴 BLOCK ]
                         </span>
                       ) : isWarning ? (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
                           [ 🟡 WARNING ]
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-950 text-sky-300 border border-sky-800">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
                           [ ℹ️ INFO ]
                         </span>
                       )}
@@ -305,8 +305,8 @@ export function TabInspection({
       {isRecordingManual && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
           <div className="bg-card border border-border w-full max-w-md rounded-lg shadow-xl overflow-hidden font-sans">
-            <div className="px-4 py-3 border-b border-border flex items-center gap-2 bg-sky-950/20">
-              <FileSignature className="w-4 h-4 text-sky-400" />
+            <div className="px-4 py-3 border-b border-border flex items-center gap-2 bg-primary/10">
+              <FileSignature className="w-4 h-4 text-primary" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
                 Catat Verifikasi Manual (Fallback PRD FR05 & AT16)
               </h3>
@@ -327,7 +327,7 @@ export function TabInspection({
                   value={manualReviewNotes}
                   onChange={(e) => setManualReviewNotes(e.target.value)}
                   placeholder="Contoh: Seluruh nama barang dan spesifikasi fisik telah dicocokkan langsung dengan dokumen cetak resmi sekolah."
-                  className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-sans"
+                  className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-sans transition"
                 />
               </div>
 
@@ -335,14 +335,14 @@ export function TabInspection({
                 <button
                   type="button"
                   onClick={() => setIsRecordingManual(false)}
-                  className="px-3 py-1 text-xs rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground transition"
+                  className="px-3 py-1.5 text-xs rounded border border-border bg-card hover:bg-muted text-foreground transition"
                 >
                   Batal
                 </button>
                 <button
                   type="button"
                   onClick={handleRecordManualReview}
-                  className="px-3 py-1 text-xs font-semibold rounded bg-sky-600 hover:bg-sky-500 text-white transition"
+                  className="px-3 py-1.5 text-xs font-semibold rounded bg-primary hover:opacity-90 text-primary-foreground transition shadow-xs"
                 >
                   Simpan Catatan
                 </button>

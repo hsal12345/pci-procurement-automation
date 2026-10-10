@@ -118,7 +118,7 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
                 type="number"
                 value={fiscalYear}
                 onChange={(e) => setFiscalYear(parseInt(e.target.value) || 2026)}
-                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono tabular-nums"
+                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-mono tabular-nums transition"
               />
             </div>
             <div>
@@ -128,7 +128,7 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
               <select
                 value={quarter}
                 onChange={(e) => setQuarter(parseInt(e.target.value) || 1)}
-                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono"
+                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-mono transition"
               >
                 <option value={1}>TW I</option>
                 <option value={2}>TW II</option>
@@ -143,7 +143,7 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
               <select
                 value={fundSource}
                 onChange={(e) => setFundSource(e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono text-[11px]"
+                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-mono text-[11px] transition"
               >
                 <option value="BOS_REGULER">BOS Reguler</option>
                 <option value="BOS_KINERJA">BOS Kinerja</option>
@@ -154,7 +154,7 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
           </div>
 
           {/* File Dropzone */}
-          <div className="border border-dashed border-border rounded-lg p-6 text-center hover:border-primary/60 transition bg-muted/10">
+          <div className="border border-dashed border-border rounded-lg p-6 text-center hover:border-primary/60 transition bg-card/60">
             <input
               type="file"
               id="xlsx-upload"
@@ -166,7 +166,7 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
               htmlFor="xlsx-upload"
               className="cursor-pointer flex flex-col items-center justify-center gap-2"
             >
-              <FileSpreadsheet className="w-8 h-8 text-muted-foreground" />
+              <FileSpreadsheet className="w-8 h-8 text-primary/70" />
               {file ? (
                 <div className="space-y-0.5">
                   <span className="font-semibold text-foreground font-mono">{file.name}</span>
@@ -199,7 +199,7 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 text-xs rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground"
+              className="px-3 py-1.5 text-xs rounded border border-border bg-card hover:bg-muted text-foreground transition"
             >
               Batal
             </button>
@@ -207,7 +207,7 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
               type="button"
               onClick={handleUpload}
               disabled={isUploading || !file}
-              className="flex items-center gap-1 px-4 py-1.5 text-xs font-semibold rounded bg-primary text-primary-foreground hover:opacity-90 transition shadow-sm disabled:opacity-50"
+              className="flex items-center gap-1 px-4 py-1.5 text-xs font-semibold rounded bg-primary text-primary-foreground hover:opacity-90 transition shadow-xs disabled:opacity-50"
             >
               {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
               <span>Mulai Ekstraksi & Impor</span>

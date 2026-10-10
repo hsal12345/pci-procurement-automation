@@ -48,9 +48,9 @@ export function ConflictModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
-      <div className="bg-card border border-red-800/80 w-full max-w-lg rounded-lg shadow-2xl overflow-hidden font-sans">
+      <div className="bg-card border border-red-500/40 w-full max-w-lg rounded-lg shadow-2xl overflow-hidden font-sans">
         {/* Header */}
-        <div className="px-4 py-3 bg-red-950/40 border-b border-red-800/80 flex items-center justify-between">
+        <div className="px-4 py-3 bg-red-500/15 border-b border-red-500/30 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertOctagon className="w-5 h-5 text-red-400" />
             <h3 className="text-xs font-bold text-red-200 uppercase tracking-wider font-mono">
@@ -60,7 +60,7 @@ export function ConflictModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-muted-foreground hover:text-foreground rounded"
+            className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-red-500/20 transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -72,7 +72,7 @@ export function ConflictModal({
             Paket transaksi ini telah diubah atau diajukan oleh pengguna lain pada saat Anda sedang menyunting.
           </p>
 
-          <div className="border border-border rounded bg-muted/20 p-3 font-mono text-[11px] space-y-1.5">
+          <div className="border border-border rounded bg-muted/30 p-3 font-mono text-[11px] space-y-1.5">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Versi token lokal Anda:</span>
               <span className="font-bold text-amber-400">Versi {localVersion}</span>
@@ -94,7 +94,7 @@ export function ConflictModal({
               type="button"
               disabled={isProcessing}
               onClick={handleReload}
-              className="w-full p-3 rounded-lg border border-border bg-muted/40 hover:bg-muted text-left transition flex items-start gap-3 group"
+              className="w-full p-3 rounded-lg border border-border bg-card hover:bg-muted text-left transition flex items-start gap-3 group shadow-xs"
             >
               <RotateCcw className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
               <div>
@@ -112,7 +112,7 @@ export function ConflictModal({
               type="button"
               disabled={isProcessing}
               onClick={handleReopen}
-              className="w-full p-3 rounded-lg border border-amber-800/80 bg-amber-950/20 hover:bg-amber-950/40 text-left transition flex items-start gap-3 group"
+              className="w-full p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-left transition flex items-start gap-3 group shadow-xs"
             >
               <CopyPlus className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
               <div>

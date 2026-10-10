@@ -67,7 +67,7 @@ export function ReopenModal({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Contoh: Penyesuaian harga satuan buku semester 2 dan pergantian nama bendahara..."
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-sans"
+              className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-sans transition"
               autoFocus
             />
           </div>
@@ -76,14 +76,14 @@ export function ReopenModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 text-xs rounded border border-border bg-muted/40 hover:bg-muted text-muted-foreground"
+              className="px-3 py-1.5 text-xs rounded border border-border bg-card hover:bg-muted text-foreground transition"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={isSubmitting || !reason.trim()}
-              className="flex items-center gap-1 px-3.5 py-1.5 text-xs font-semibold rounded bg-primary text-primary-foreground hover:opacity-90 transition disabled:opacity-50"
+              className="flex items-center gap-1 px-3.5 py-1.5 text-xs font-semibold rounded bg-primary text-primary-foreground hover:opacity-90 transition shadow-xs disabled:opacity-50"
             >
               {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
               <span>Buat Revisi {currentRevisionNumber + 1}</span>

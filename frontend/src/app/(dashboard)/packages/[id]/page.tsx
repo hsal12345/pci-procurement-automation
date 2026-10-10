@@ -46,7 +46,7 @@ export default function PackageWorkspacePage() {
   const searchParams = useSearchParams();
   const packageId = params.id as string;
 
-  const initialTab = searchParams.get("tab") || "items";
+  const initialTab = searchParams.get("tab") || "identity";
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
   const [currentRole, setCurrentRole] = useState<UserRole>("ADMINISTRATION");
@@ -230,7 +230,7 @@ export default function PackageWorkspacePage() {
       />
 
       {/* 2. Horizontal Tab Navigation Strip */}
-      <div className="border-b border-border bg-card/60 px-4 flex items-center gap-1 overflow-x-auto select-none">
+      <div className="border-b border-border bg-card px-4 flex items-center gap-1 overflow-x-auto select-none shadow-sm">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -240,16 +240,16 @@ export default function PackageWorkspacePage() {
               key={tab.key}
               type="button"
               onClick={() => handleTabChange(tab.key)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-2 px-3.5 py-2.5 text-xs border-b-2 transition-all whitespace-nowrap ${
                 isActive
-                  ? "border-primary text-foreground font-semibold bg-muted/30"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/20"
+                  ? "border-primary text-primary font-bold bg-primary/10"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50 font-medium"
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className={`w-3.5 h-3.5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
               <span>{tab.label}</span>
               {tab.key === "inspection" && blockingErrorsCount > 0 && (
-                <span className="ml-1 px-1 py-0.2 rounded bg-red-950 text-red-400 font-mono text-[9px] border border-red-800 font-bold">
+                <span className="ml-1 px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 font-mono text-[9px] border border-red-500/40 font-bold">
                   {blockingErrorsCount}
                 </span>
               )}
