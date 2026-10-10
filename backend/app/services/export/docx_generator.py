@@ -3,12 +3,31 @@ as editable, high-fidelity Microsoft Word (.docx) files using docxtpl.
 """
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
+from docx.shared import Inches
 
 from app.services.export.template_builder import (
     TEMPLATES_DIR,
     build_all_templates,
 )
+
+
+def resolve_letterhead_image_path(path_str: Optional[str]) -> Optional[Path]:
+    """Resolves local absolute or relative storage path of uploaded letterhead image."""
+    if not path_str:
+        return None
+    p = Path(path_str)
+    if p.is_file():
+        return p
+    clean = path_str.lstrip("/\\")
+    backend_dir = Path(__file__).resolve().parent.parent.parent
+    candidate = backend_dir / clean
+    if candidate.is_file():
+        return candidate
+    ws_candidate = backend_dir.parent / clean
+    if ws_candidate.is_file():
+        return ws_candidate
+    return None
 
 
 DOCUMENT_MAP = {
@@ -37,6 +56,30 @@ class DocxPackageGenerator:
         if not TEMPLATES_DIR.exists() or not any(TEMPLATES_DIR.glob("*.docx")):
             build_all_templates()
 
+    def _prepare_render_context(self, doc: DocxTemplate) -> Dict[str, Any]:
+        """Prepares render context with docxtpl InlineImage instances bound to the document."""
+        ctx = dict(self.context)
+
+        school_path_raw = ctx.get("school", {}).get("letterhead_path")
+        school_img_path = resolve_letterhead_image_path(school_path_raw)
+        if school_img_path:
+            ctx["school_has_letterhead_image"] = True
+            ctx["school_letterhead_image"] = InlineImage(doc, str(school_img_path), width=Inches(6.75))
+        else:
+            ctx["school_has_letterhead_image"] = False
+            ctx["school_letterhead_image"] = None
+
+        company_path_raw = ctx.get("company", {}).get("logo_path")
+        company_img_path = resolve_letterhead_image_path(company_path_raw)
+        if company_img_path:
+            ctx["company_has_letterhead_image"] = True
+            ctx["company_letterhead_image"] = InlineImage(doc, str(company_img_path), width=Inches(6.75))
+        else:
+            ctx["company_has_letterhead_image"] = False
+            ctx["company_letterhead_image"] = None
+
+        return ctx
+
     def generate_all(self, output_dir: Path) -> Dict[str, Path]:
         """Renders all 13 documents into the specified output directory.
         Returns a dict mapping doc_code (e.g. 'D01') to the rendered Path.
@@ -51,7 +94,8 @@ class DocxPackageGenerator:
                 build_all_templates()
 
             doc = DocxTemplate(str(tmpl_path))
-            doc.render(self.context)
+            render_ctx = self._prepare_render_context(doc)
+            doc.render(render_ctx)
 
             out_path = output_dir / out_filename
             doc.save(str(out_path))
@@ -71,6 +115,7 @@ class DocxPackageGenerator:
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         doc = DocxTemplate(str(tmpl_path))
-        doc.render(self.context)
+        render_ctx = self._prepare_render_context(doc)
+        doc.render(render_ctx)
         doc.save(str(output_path))
         return output_path

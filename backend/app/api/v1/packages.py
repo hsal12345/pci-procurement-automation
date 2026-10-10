@@ -101,21 +101,32 @@ async def create_package(payload: PackageCreate, db: AsyncSession = Depends(get_
         "npsn": school.npsn,
         "address": school.address,
         "email": school.email,
+        "phone": school.phone,
         "level": school.level,
+        "subdistrict": school.subdistrict,
+        "postal_code": school.postal_code,
+        "letterhead_path": school.letterhead_path,
     }
-    company_res = await db.execute(select(Company).where(Company.is_active == True))
-    company = company_res.scalar_one_or_none()
+    company = None
+    if payload.company_id:
+        comp_res = await db.execute(select(Company).where(Company.id == payload.company_id))
+        company = comp_res.scalars().first()
+    if not company:
+        company_res = await db.execute(select(Company).where(Company.is_active == True))
+        company = company_res.scalars().first()
     company_snapshot = {
         "id": str(company.id) if company else None,
         "name": company.legal_name if company else "CV. PUSTAKA CEMERLANG INDONESIA",
         "legal_name": company.legal_name if company else "CV. PUSTAKA CEMERLANG INDONESIA",
         "npwp": company.npwp if company else "",
         "address": company.address if company else "",
+        "phone": company.phone if company else "",
         "director_name": company.director_name if company else "Bambang Solifian",
         "director_title": company.director_title if company else "Direktur",
         "bank_name": company.bank_name if company else "",
         "bank_account_number": company.bank_account_number if company else "",
         "bank_account_holder": company.bank_account_holder if company else "",
+        "logo_path": company.logo_path if company else "",
     }
 
     # Query active tax policies dynamically from DB (auto-seed if table is empty)
@@ -172,18 +183,18 @@ async def create_package(payload: PackageCreate, db: AsyncSession = Depends(get_
             "person_name": o.person_name,
             "name": o.person_name,
             "nip": o.nip,
-            "position_sk_number": "",
+            "position_sk_number": o.position_sk_number or "",
         }
         for o in officials
     ]
     if company:
         officials_snapshot.append({
             "role": "DIREKTUR",
-            "role_title": "Direktur Rekanan",
+            "role_title": company.director_title or "Direktur Rekanan",
             "person_name": company.director_name or "Bambang Solifian",
             "name": company.director_name or "Bambang Solifian",
             "nip": None,
-            "position_sk_number": "",
+            "position_sk_number": company.director_sk_number or "Akta Notaris No. 12 Th 2020",
         })
 
     revision = PackageRevision(

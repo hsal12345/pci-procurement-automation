@@ -32,8 +32,25 @@ class Company(BaseModel):
     bank_account_holder = Column(String(255), nullable=True)
     director_name = Column(String(255), nullable=False)
     director_title = Column(String(100), nullable=False, default="Direktur")
+    director_sk_number = Column(String(128), nullable=True)
     logo_path = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+
+    officials = relationship("CompanyOfficial", back_populates="company", cascade="all, delete-orphan", lazy="selectin")
+
+
+class CompanyOfficial(BaseModel):
+    __tablename__ = "company_officials"
+
+    company_id = Column(GUID, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    person_name = Column(String(255), nullable=False)
+    role = Column(String(64), nullable=False, default="DIREKTUR")
+    role_title = Column(String(100), nullable=False, default="Direktur")
+    nip = Column(String(32), nullable=True)
+    position_sk_number = Column(String(128), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    company = relationship("Company", back_populates="officials")
 
 
 class School(BaseModel):
@@ -61,6 +78,7 @@ class OfficialAppointment(BaseModel):
     person_name = Column(String(255), nullable=False)
     nip = Column(String(32), nullable=True)  # Stored as text to preserve leading zeros
     role = Column(String(64), nullable=False)  # KEPALA_SEKOLAH, BENDAHARA, PENGURUS_BARANG, TIM_BOS
+    position_sk_number = Column(String(128), nullable=True)  # SK Penugasan e.g. 800/014/SK/2025
     valid_from = Column(Date, nullable=False, default=date(2020, 1, 1))
     valid_to = Column(Date, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)

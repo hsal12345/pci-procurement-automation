@@ -105,6 +105,7 @@ class PackageCreate(BaseSchema):
     school_id: UUID
     fiscal_year: int
     quarter: int = Field(ge=1, le=4)
+    company_id: Optional[UUID] = None
     funding_source_id: Optional[UUID] = None
     budget_id: Optional[UUID] = None
     package_number: Optional[str] = None

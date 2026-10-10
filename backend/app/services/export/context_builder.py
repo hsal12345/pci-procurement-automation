@@ -268,6 +268,7 @@ def build_generation_context(
             "email": school_snap.get("email") or "sdnkebonkosong09@jakarta.go.id",
             "principal_name": kepala_sekolah["name"],
             "principal_nip": kepala_sekolah["nip"],
+            "letterhead_path": school_snap.get("letterhead_path"),
         },
         "company": {
             "legal_name": company_snap.get("legal_name") or "CV. PUSTAKA CEMERLANG INDONESIA",
@@ -279,6 +280,7 @@ def build_generation_context(
             "bank_name": company_snap.get("bank_name") or "BANK DKI",
             "bank_account_number": company_snap.get("bank_account_number") or "300.21.00000.1",
             "bank_account_name": company_snap.get("bank_account_name") or "CV PUSTAKA CEMERLANG INDONESIA",
+            "logo_path": company_snap.get("logo_path"),
         },
         "officials": {
             "kepala_sekolah": kepala_sekolah,

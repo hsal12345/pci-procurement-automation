@@ -116,6 +116,13 @@ def add_draft_banner(doc):
 
 def add_school_kop(doc):
     """Standardized Kop Surat Pemerintah Provinsi DKI Jakarta / Dinas Pendidikan."""
+    p_img = doc.add_paragraph()
+    p_img.paragraph_format.space_before = Pt(0)
+    p_img.paragraph_format.space_after = Pt(4)
+    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r_img = p_img.add_run("{% if school_has_letterhead_image %}{{ school_letterhead_image }}{% else %}")
+    r_img.font.name = "Arial"
+
     p = doc.add_paragraph()
     p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after = Pt(2)
@@ -144,7 +151,8 @@ def add_school_kop(doc):
     p_line.paragraph_format.space_before = Pt(0)
     p_line.paragraph_format.space_after = Pt(8)
     p_line.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r_line = p_line.add_run("=" * 68)
+    r_line = p_line.add_run("=" * 68 + "{% endif %}")
+    r_line.font.name = "Arial"
     r_line.font.bold = True
     r_line.font.size = Pt(9.5)
     r_line.font.color.rgb = COLOR_PRIMARY
@@ -152,6 +160,13 @@ def add_school_kop(doc):
 
 def add_company_kop(doc):
     """Standardized Kop Surat CV. Pustaka Cemerlang Indonesia."""
+    p_img = doc.add_paragraph()
+    p_img.paragraph_format.space_before = Pt(0)
+    p_img.paragraph_format.space_after = Pt(4)
+    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r_img = p_img.add_run("{% if company_has_letterhead_image %}{{ company_letterhead_image }}{% else %}")
+    r_img.font.name = "Arial"
+
     p = doc.add_paragraph()
     p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after = Pt(2)
@@ -179,7 +194,8 @@ def add_company_kop(doc):
     p_line.paragraph_format.space_before = Pt(0)
     p_line.paragraph_format.space_after = Pt(8)
     p_line.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r_line = p_line.add_run("=" * 68)
+    r_line = p_line.add_run("=" * 68 + "{% endif %}")
+    r_line.font.name = "Arial"
     r_line.font.bold = True
     r_line.font.size = Pt(9.5)
     r_line.font.color.rgb = COLOR_PRIMARY
@@ -197,7 +213,7 @@ def add_signatures_2col(
     right_nip: str,
     date_str: str = None
 ):
-    """Adds a formal borderless 2-column signature block."""
+    """Adds a formal borderless 2-column signature block that never splits across pages."""
     tbl = doc.add_table(rows=1, cols=2)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     # Clear borders
@@ -210,8 +226,11 @@ def add_signatures_2col(
     )
     tblPr.append(borders)
 
-    c_left = tbl.rows[0].cells[0]
-    c_right = tbl.rows[0].cells[1]
+    row = tbl.rows[0]
+    mark_row_cant_split(row)
+
+    c_left = row.cells[0]
+    c_right = row.cells[1]
     set_cell_width(c_left, 3.35)
     set_cell_width(c_right, 3.35)
     set_cell_margins(c_left, top=100, bottom=100, left=40, right=40)
@@ -221,24 +240,32 @@ def add_signatures_2col(
     p_l = c_left.paragraphs[0]
     p_l.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_l.paragraph_format.line_spacing = 1.2
-    p_l.add_run(f"{left_title}\n{left_role}\n\n\n\n\n")
+    p_l.paragraph_format.keep_with_next = True
+    r_lt = p_l.add_run(f"{left_title}\n{left_role}\n\n\n\n\n")
+    r_lt.font.name = "Arial"
     r_ln = p_l.add_run(f"{left_name}\n")
+    r_ln.font.name = "Arial"
     r_ln.font.bold = True
     r_ln.underline = True
     if left_nip:
-        p_l.add_run(f"NIP: {left_nip}")
+        r_lp = p_l.add_run(f"NIP: {left_nip}")
+        r_lp.font.name = "Arial"
 
     # Right Cell
     p_r = c_right.paragraphs[0]
     p_r.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_r.paragraph_format.line_spacing = 1.2
+    p_r.paragraph_format.keep_with_next = True
     top_line = f"Jakarta, {date_str}\n" if date_str else ""
-    p_r.add_run(f"{top_line}{right_title}\n{right_role}\n\n\n\n\n")
+    r_rt = p_r.add_run(f"{top_line}{right_title}\n{right_role}\n\n\n\n\n")
+    r_rt.font.name = "Arial"
     r_rn = p_r.add_run(f"{right_name}\n")
+    r_rn.font.name = "Arial"
     r_rn.font.bold = True
     r_rn.underline = True
     if right_nip:
-        p_r.add_run(f"NIP: {right_nip}")
+        r_rp = p_r.add_run(f"NIP: {right_nip}")
+        r_rp.font.name = "Arial"
 
 
 def add_signatures_pphp(
@@ -257,7 +284,10 @@ def add_signatures_pphp(
     p_intro = doc.add_paragraph()
     p_intro.paragraph_format.space_before = Pt(8)
     p_intro.paragraph_format.space_after = Pt(4)
-    p_intro.add_run("Tim Pemeriksa Hasil Pekerjaan (PPHP):\n")
+    p_intro.paragraph_format.keep_with_next = True
+    r_in = p_intro.add_run("Tim Pemeriksa Hasil Pekerjaan (PPHP):\n")
+    r_in.font.name = "Arial"
+    r_in.font.bold = True
 
     tbl = doc.add_table(rows=3, cols=2)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -272,6 +302,7 @@ def add_signatures_pphp(
     tblPr.append(borders)
 
     for r in tbl.rows:
+        mark_row_cant_split(r)
         set_cell_width(r.cells[0], 4.2)
         set_cell_width(r.cells[1], 2.5)
         set_cell_margins(r.cells[0], top=40, bottom=40)
@@ -279,27 +310,46 @@ def add_signatures_pphp(
 
     # Ketua
     p1 = tbl.rows[0].cells[0].paragraphs[0]
-    p1.add_run(f"1. Ketua      : {pphp_ketua_name_var} (NIP: {pphp_ketua_nip_var})")
-    tbl.rows[0].cells[1].paragraphs[0].add_run("( 1. ................................ )")
+    p1.paragraph_format.keep_with_next = True
+    r1 = p1.add_run(f"1. Ketua      : {pphp_ketua_name_var} (NIP: {pphp_ketua_nip_var})")
+    r1.font.name = "Arial"
+    p1_r = tbl.rows[0].cells[1].paragraphs[0]
+    p1_r.paragraph_format.keep_with_next = True
+    r1_r = p1_r.add_run("( 1. ................................ )")
+    r1_r.font.name = "Arial"
 
     # Sekretaris
     p2 = tbl.rows[1].cells[0].paragraphs[0]
-    p2.add_run(f"2. Sekretaris : {pphp_sekre_name_var} (NIP: {pphp_sekre_nip_var})")
-    tbl.rows[1].cells[1].paragraphs[0].add_run("( 2. ................................ )")
+    p2.paragraph_format.keep_with_next = True
+    r2 = p2.add_run(f"2. Sekretaris : {pphp_sekre_name_var} (NIP: {pphp_sekre_nip_var})")
+    r2.font.name = "Arial"
+    p2_r = tbl.rows[1].cells[1].paragraphs[0]
+    p2_r.paragraph_format.keep_with_next = True
+    r2_r = p2_r.add_run("( 2. ................................ )")
+    r2_r.font.name = "Arial"
 
     # Anggota
     p3 = tbl.rows[2].cells[0].paragraphs[0]
-    p3.add_run(f"3. Anggota    : {pphp_anggo_name_var} (NIP: {pphp_anggo_nip_var})")
-    tbl.rows[2].cells[1].paragraphs[0].add_run("( 3. ................................ )")
+    p3.paragraph_format.keep_with_next = True
+    r3 = p3.add_run(f"3. Anggota    : {pphp_anggo_name_var} (NIP: {pphp_anggo_nip_var})")
+    r3.font.name = "Arial"
+    p3_r = tbl.rows[2].cells[1].paragraphs[0]
+    p3_r.paragraph_format.keep_with_next = True
+    r3_r = p3_r.add_run("( 3. ................................ )")
+    r3_r.font.name = "Arial"
 
     p_ven = doc.add_paragraph()
     p_ven.paragraph_format.space_before = Pt(10)
     p_ven.paragraph_format.space_after = Pt(2)
-    p_ven.add_run(f"Penyedia Barang ({company_name_var}):\n\n\n\n")
+    p_ven.paragraph_format.keep_with_next = True
+    r_v = p_ven.add_run(f"Penyedia Barang ({company_name_var}):\n\n\n\n")
+    r_v.font.name = "Arial"
     r_d = p_ven.add_run(f"{director_name_var}\n")
+    r_d.font.name = "Arial"
     r_d.font.bold = True
     r_d.underline = True
-    p_ven.add_run("Direktur")
+    r_dir = p_ven.add_run("Direktur")
+    r_dir.font.name = "Arial"
 
 
 def build_all_templates():
@@ -326,6 +376,10 @@ def build_all_templates():
     for filename, builder_func in builders.items():
         file_path = TEMPLATES_DIR / filename
         doc = Document()
+        normal_style = doc.styles['Normal']
+        normal_style.font.name = 'Arial'
+        normal_style.font.size = Pt(9.5)
+
         for section in doc.sections:
             section.top_margin = Inches(0.75)
             section.bottom_margin = Inches(0.75)
@@ -362,7 +416,7 @@ def _build_d01_hps(doc: Document):
     p_meta.add_run("Satuan Kerja    : {{ school.name }}\n")
     p_meta.add_run("Tahun Anggaran  : {{ package.fiscal_year }}\n")
 
-    col_widths = [0.45, 2.55, 0.55, 0.60, 1.25, 1.35]
+    col_widths = [0.35, 2.65, 0.55, 0.60, 1.25, 1.35]
     tbl = doc.add_table(rows=7, cols=6)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     set_table_borders(tbl)
@@ -473,6 +527,7 @@ def _build_d01_hps(doc: Document):
     p_tb = doc.add_paragraph()
     p_tb.paragraph_format.space_before = Pt(6)
     p_tb.paragraph_format.space_after = Pt(12)
+    p_tb.paragraph_format.keep_with_next = True
     r = p_tb.add_run("Terbilang: ")
     r.font.bold = True
     r.font.size = Pt(9)
@@ -522,7 +577,7 @@ def _build_d02_spp(doc: Document):
         "kami mohon kesediaan Saudara untuk mengajukan Surat Penawaran Harga untuk daftar kebutuhan barang sebagai berikut:\n"
     )
 
-    col_widths = [0.55, 4.20, 1.00, 1.00]
+    col_widths = [0.35, 4.40, 1.00, 1.00]
     tbl = doc.add_table(rows=4, cols=4)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     set_table_borders(tbl)
@@ -569,6 +624,7 @@ def _build_d02_spp(doc: Document):
     p_close = doc.add_paragraph()
     p_close.paragraph_format.space_before = Pt(8)
     p_close.paragraph_format.space_after = Pt(12)
+    p_close.paragraph_format.keep_with_next = True
     p_close.add_run("Demikian surat permintaan penawaran ini disampaikan, atas perhatian dan kerjasamanya kami ucapkan terima kasih.\n")
 
     add_signatures_2col(
@@ -610,7 +666,7 @@ def _build_d03_penawaran(doc: Document):
         "dengan ini kami mengajukan penawaran harga pengadaan barang sebagai berikut:\n"
     )
 
-    col_widths = [0.45, 2.55, 0.55, 0.60, 1.25, 1.35]
+    col_widths = [0.35, 2.65, 0.55, 0.60, 1.25, 1.35]
     tbl = doc.add_table(rows=7, cols=6)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     set_table_borders(tbl)
@@ -716,6 +772,7 @@ def _build_d03_penawaran(doc: Document):
     p_tb = doc.add_paragraph()
     p_tb.paragraph_format.space_before = Pt(6)
     p_tb.paragraph_format.space_after = Pt(12)
+    p_tb.paragraph_format.keep_with_next = True
     r = p_tb.add_run("Terbilang: ")
     r.font.bold = True
     r.font.size = Pt(9)
@@ -759,7 +816,7 @@ def _build_d04_negosiasi(doc: Document):
         "dengan {{ company.legal_name }} perihal pengadaan kebutuhan sekolah, dengan rincian kesepakatan sebagai berikut:\n"
     )
 
-    col_widths = [0.40, 2.10, 0.50, 0.55, 1.05, 1.05, 1.10]
+    col_widths = [0.35, 2.15, 0.50, 0.55, 1.05, 1.05, 1.10]
     tbl = doc.add_table(rows=7, cols=7)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     set_table_borders(tbl)
@@ -866,6 +923,7 @@ def _build_d04_negosiasi(doc: Document):
     p_tb = doc.add_paragraph()
     p_tb.paragraph_format.space_before = Pt(6)
     p_tb.paragraph_format.space_after = Pt(12)
+    p_tb.paragraph_format.keep_with_next = True
     r = p_tb.add_run("Terbilang: ")
     r.font.bold = True
     r.font.size = Pt(9)
@@ -907,7 +965,7 @@ def _build_d05_pesanan(doc: Document):
     p_to.add_run("Kepada Yth.\n{{ company.legal_name }}\n{{ company.address }}\n\n")
     p_to.add_run("Bersama ini diperintahkan untuk mengirimkan barang pesanan berikut sesuai spesifikasi dan harga yang disepakati:\n")
 
-    col_widths = [0.45, 2.55, 0.55, 0.60, 1.25, 1.35]
+    col_widths = [0.35, 2.65, 0.55, 0.60, 1.25, 1.35]
     tbl = doc.add_table(rows=7, cols=6)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     set_table_borders(tbl)
@@ -1013,6 +1071,7 @@ def _build_d05_pesanan(doc: Document):
     p_tb = doc.add_paragraph()
     p_tb.paragraph_format.space_before = Pt(6)
     p_tb.paragraph_format.space_after = Pt(12)
+    p_tb.paragraph_format.keep_with_next = True
     r = p_tb.add_run("Terbilang: ")
     r.font.bold = True
     r.font.size = Pt(9)
@@ -1054,7 +1113,7 @@ def _build_d06_faktur(doc: Document):
     p_meta.add_run("Kepada Yth.  : Kepala {{ school.name }}\n")
     p_meta.add_run("Alamat       : {{ school.address }}\n")
 
-    col_widths = [0.45, 2.55, 0.55, 0.60, 1.25, 1.35]
+    col_widths = [0.35, 2.65, 0.55, 0.60, 1.25, 1.35]
     tbl = doc.add_table(rows=7, cols=6)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     set_table_borders(tbl)
@@ -1170,6 +1229,7 @@ def _build_d06_faktur(doc: Document):
     p_bank = doc.add_paragraph()
     p_bank.paragraph_format.line_spacing = 1.15
     p_bank.paragraph_format.space_after = Pt(12)
+    p_bank.paragraph_format.keep_with_next = True
     p_bank.add_run("Pembayaran dapat ditransfer ke rekening:\n")
     p_bank.add_run("Bank           : {{ company.bank_name }}\n")
     p_bank.add_run("Nomor Rekening : {{ company.bank_account_number }}\n")
@@ -1241,6 +1301,7 @@ def _build_d07_kwitansi(doc: Document):
 
     p_spc = doc.add_paragraph()
     p_spc.paragraph_format.space_before = Pt(12)
+    p_spc.paragraph_format.keep_with_next = True
 
     add_signatures_2col(
         doc,
@@ -1276,7 +1337,7 @@ def _build_d08_surat_jalan(doc: Document):
     p_meta.add_run("Kepada  : Pengurus Barang / Kepala {{ school.name }}\n")
     p_meta.add_run("Alamat  : {{ school.address }}\n")
 
-    col_widths = [0.55, 3.20, 0.90, 0.90, 1.20]
+    col_widths = [0.35, 3.40, 0.90, 0.90, 1.20]
     tbl = doc.add_table(rows=4, cols=5)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     set_table_borders(tbl)
@@ -1324,6 +1385,7 @@ def _build_d08_surat_jalan(doc: Document):
 
     p_spc = doc.add_paragraph()
     p_spc.paragraph_format.space_before = Pt(12)
+    p_spc.paragraph_format.keep_with_next = True
 
     add_signatures_2col(
         doc,
@@ -1361,7 +1423,7 @@ def _build_d09_bapb(doc: Document):
         "berdasarkan Surat Pesanan Nomor: {{ numbers.D05.doc_number }}. Hasil pemeriksaan dicatat sebagai berikut:\n"
     )
 
-    col_widths = [0.55, 3.20, 0.90, 0.90, 1.20]
+    col_widths = [0.35, 3.40, 0.90, 0.90, 1.20]
     tbl = doc.add_table(rows=4, cols=5)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     set_table_borders(tbl)
@@ -1410,6 +1472,7 @@ def _build_d09_bapb(doc: Document):
     p_conc = doc.add_paragraph()
     p_conc.paragraph_format.space_before = Pt(8)
     p_conc.paragraph_format.space_after = Pt(8)
+    p_conc.paragraph_format.keep_with_next = True
     p_conc.add_run("Kesimpulan: Seluruh barang yang dikirim dalam kondisi 100% baik, lengkap, dan memenuhi spesifikasi teknis yang disepakati.\n")
 
     add_signatures_pphp(
@@ -1442,6 +1505,7 @@ def _build_d10_bast(doc: Document):
     p_narr = doc.add_paragraph()
     p_narr.paragraph_format.line_spacing = 1.2
     p_narr.paragraph_format.space_after = Pt(12)
+    p_narr.paragraph_format.keep_with_next = True
     p_narr.add_run(
         "{{ events.BAST.narrative_id }}, bertempat di {{ events.BAST.location }}, yang bertanda tangan di bawah ini:\n"
         "1. Nama     : {{ company.director_name }}\n"
@@ -1531,6 +1595,7 @@ def _build_d11_bapp(doc: Document):
     p_tb = doc.add_paragraph()
     p_tb.paragraph_format.space_before = Pt(6)
     p_tb.paragraph_format.space_after = Pt(12)
+    p_tb.paragraph_format.keep_with_next = True
     r = p_tb.add_run("Terbilang: ")
     r.font.bold = True
     r.font.size = Pt(9)
@@ -1565,7 +1630,7 @@ def _build_d12_lamp_bapp(doc: Document):
     r.underline = True
     p_title.add_run("Nomor: {{ numbers.D12.doc_number }}\n")
 
-    col_widths = [0.45, 2.55, 0.55, 0.60, 1.25, 1.35]
+    col_widths = [0.35, 2.65, 0.55, 0.60, 1.25, 1.35]
     tbl = doc.add_table(rows=7, cols=6)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     set_table_borders(tbl)
@@ -1671,6 +1736,7 @@ def _build_d12_lamp_bapp(doc: Document):
     p_tb = doc.add_paragraph()
     p_tb.paragraph_format.space_before = Pt(6)
     p_tb.paragraph_format.space_after = Pt(12)
+    p_tb.paragraph_format.keep_with_next = True
     r = p_tb.add_run("Terbilang: ")
     r.font.bold = True
     r.font.size = Pt(9)
@@ -1715,7 +1781,7 @@ def _build_d13_bast_rekanan(doc: Document):
         "Surat Pesanan Nomor: {{ numbers.D05.doc_number }} kepada pihak {{ school.name }} dengan kondisi baik dan lengkap sebagai berikut:\n"
     )
 
-    col_widths = [0.55, 3.20, 0.90, 0.90, 1.20]
+    col_widths = [0.35, 3.40, 0.90, 0.90, 1.20]
     tbl = doc.add_table(rows=4, cols=5)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     set_table_borders(tbl)
@@ -1763,6 +1829,7 @@ def _build_d13_bast_rekanan(doc: Document):
 
     p_spc = doc.add_paragraph()
     p_spc.paragraph_format.space_before = Pt(12)
+    p_spc.paragraph_format.keep_with_next = True
 
     add_signatures_2col(
         doc,

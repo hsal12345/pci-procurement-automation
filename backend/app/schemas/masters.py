@@ -20,6 +20,7 @@ class CompanyBase(BaseSchema):
     bank_account_holder: Optional[str] = None
     director_name: str
     director_title: str = "Direktur"
+    director_sk_number: Optional[str] = None
     logo_path: Optional[str] = None
     is_active: bool = True
 
@@ -28,8 +29,53 @@ class CompanyCreate(CompanyBase):
     pass
 
 
+class CompanyUpdate(BaseSchema):
+    legal_name: Optional[str] = None
+    npwp: Optional[str] = None
+    address: Optional[str] = None
+    subdistrict: Optional[str] = None
+    city: Optional[str] = None
+    postal_code: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_account_holder: Optional[str] = None
+    director_name: Optional[str] = None
+    director_title: Optional[str] = None
+    director_sk_number: Optional[str] = None
+    logo_path: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class CompanyOfficialBase(BaseSchema):
+    company_id: UUID
+    person_name: str
+    role: str = "DIREKTUR"
+    role_title: str = "Direktur"
+    nip: Optional[str] = None
+    position_sk_number: Optional[str] = None
+    is_active: bool = True
+
+
+class CompanyOfficialCreate(BaseSchema):
+    person_name: str
+    role: str = "DIREKTUR"
+    role_title: str = "Direktur"
+    nip: Optional[str] = None
+    position_sk_number: Optional[str] = None
+    is_active: bool = True
+
+
+class CompanyOfficialResponse(CompanyOfficialBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
 class CompanyResponse(CompanyBase):
     id: UUID
+    officials: Optional[List[CompanyOfficialResponse]] = []
     created_at: datetime
     updated_at: datetime
 
@@ -51,6 +97,19 @@ class SchoolCreate(SchoolBase):
     pass
 
 
+class SchoolUpdate(BaseSchema):
+    name: Optional[str] = None
+    npsn: Optional[str] = None
+    level: Optional[str] = None
+    address: Optional[str] = None
+    subdistrict: Optional[str] = None
+    postal_code: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    letterhead_path: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
 class SchoolResponse(SchoolBase):
     id: UUID
     created_at: datetime
@@ -62,13 +121,30 @@ class OfficialAppointmentBase(BaseSchema):
     person_name: str
     nip: Optional[str] = None  # Stored as text, preserves leading zero
     role: str  # KEPALA_SEKOLAH, BENDAHARA, PENGURUS_BARANG, TIM_BOS
+    position_sk_number: Optional[str] = None  # SK Penugasan e.g. 800/014/SK/2025
     valid_from: date
     valid_to: Optional[date] = None
     is_active: bool = True
 
 
-class OfficialAppointmentCreate(OfficialAppointmentBase):
-    pass
+class OfficialAppointmentCreate(BaseSchema):
+    person_name: str
+    nip: Optional[str] = None
+    role: str
+    position_sk_number: Optional[str] = None
+    valid_from: date = date(2026, 1, 1)
+    valid_to: Optional[date] = None
+    is_active: bool = True
+
+
+class OfficialAppointmentUpdate(BaseSchema):
+    person_name: Optional[str] = None
+    nip: Optional[str] = None
+    role: Optional[str] = None
+    position_sk_number: Optional[str] = None
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    is_active: Optional[bool] = None
 
 
 class OfficialAppointmentResponse(OfficialAppointmentBase):

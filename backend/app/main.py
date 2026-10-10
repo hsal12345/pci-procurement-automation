@@ -57,8 +57,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.staticfiles import StaticFiles
+
 # Register API v1 routes
 app.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
+
+# Mount storage directory for static file access (letterheads, artifacts, logos)
+storage_dir = settings.BASE_DIR / "storage"
+storage_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/storage", StaticFiles(directory=str(storage_dir)), name="storage")
 
 
 @app.get("/health", tags=["Health"])

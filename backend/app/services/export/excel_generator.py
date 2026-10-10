@@ -123,7 +123,7 @@ class ExcelPackageGenerator:
     # ==================== D01: HPS ====================
     def _render_d01_hps(self, wb, fmt):
         ws = wb.add_worksheet("HPS")
-        ws.set_column(0, 0, 5)   # No
+        ws.set_column(0, 0, 4)   # No
         ws.set_column(1, 1, 28)  # Nama Barang
         ws.set_column(2, 2, 10)  # Volume
         ws.set_column(3, 3, 10)  # Satuan
@@ -203,7 +203,7 @@ class ExcelPackageGenerator:
     # ==================== D02: SPP ====================
     def _render_d02_spp(self, wb, fmt):
         ws = wb.add_worksheet("SPP")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 30)
         ws.set_column(2, 2, 12)
         ws.set_column(3, 3, 12)
@@ -245,7 +245,7 @@ class ExcelPackageGenerator:
     # ==================== D03: SURAT PENAWARAN ====================
     def _render_d03_penawaran(self, wb, fmt):
         ws = wb.add_worksheet("SURAT PENAWARAN")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 28)
         ws.set_column(2, 2, 10)
         ws.set_column(3, 3, 10)
@@ -296,7 +296,7 @@ class ExcelPackageGenerator:
     # ==================== D04: SURAT NEGOSIASI (2) ====================
     def _render_d04_negosiasi(self, wb, fmt):
         ws = wb.add_worksheet("SURAT NEGOSIASI (2)")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 24)
         ws.set_column(2, 2, 8)
         ws.set_column(3, 3, 8)
@@ -345,7 +345,7 @@ class ExcelPackageGenerator:
     # ==================== D05: SURAT PESANAN (2) ====================
     def _render_d05_pesanan(self, wb, fmt):
         ws = wb.add_worksheet("SURAT PESANAN (2)")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 28)
         ws.set_column(2, 2, 8)
         ws.set_column(3, 3, 10)
@@ -391,7 +391,7 @@ class ExcelPackageGenerator:
     # ==================== D06: FAKTUR ====================
     def _render_d06_faktur(self, wb, fmt):
         ws = wb.add_worksheet("FAKTUR")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 26)
         ws.set_column(2, 2, 8)
         ws.set_column(3, 3, 14)
@@ -485,7 +485,7 @@ class ExcelPackageGenerator:
     # ==================== D08: SURAT JALAN ====================
     def _render_d08_surat_jalan(self, wb, fmt):
         ws = wb.add_worksheet("SURAT JALAN")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 28)
         ws.set_column(2, 2, 10)
         ws.set_column(3, 3, 10)
@@ -524,7 +524,7 @@ class ExcelPackageGenerator:
     # ==================== D09: BAPB ====================
     def _render_d09_bapb(self, wb, fmt):
         ws = wb.add_worksheet("BAPB")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 28)
         ws.set_column(2, 2, 10)
         ws.set_column(3, 3, 10)
@@ -558,7 +558,7 @@ class ExcelPackageGenerator:
     # ==================== D10: BAST ====================
     def _render_d10_bast(self, wb, fmt):
         ws = wb.add_worksheet("BAST")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 28)
         ws.set_column(2, 2, 10)
         ws.set_column(3, 3, 10)
@@ -594,7 +594,7 @@ class ExcelPackageGenerator:
     # ==================== D11: BAPP ====================
     def _render_d11_bapp(self, wb, fmt):
         ws = wb.add_worksheet("BAPP")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 35)
         ws.set_column(2, 2, 35)
 
@@ -616,7 +616,7 @@ class ExcelPackageGenerator:
     # ==================== D12: Lamp BAPP ====================
     def _render_d12_lamp_bapp(self, wb, fmt):
         ws = wb.add_worksheet("Lamp BAPP")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 28)
         ws.set_column(2, 2, 8)
         ws.set_column(3, 3, 10)
@@ -650,7 +650,7 @@ class ExcelPackageGenerator:
     # ==================== D13: BAST Rekanan ====================
     def _render_d13_bast_rekanan(self, wb, fmt):
         ws = wb.add_worksheet("BAST Rekanan")
-        ws.set_column(0, 0, 5)
+        ws.set_column(0, 0, 4)
         ws.set_column(1, 1, 28)
         ws.set_column(2, 2, 10)
         ws.set_column(3, 3, 10)
