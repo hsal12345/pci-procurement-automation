@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.api.deps import get_current_actor_name, get_current_user_role
 from app.config import settings
 from app.database import get_db
 from app.models.imports import ImportRecord
@@ -24,18 +25,18 @@ from app.services.audit_service import audit_service
 router = APIRouter(prefix="/ai", tags=["AI Assistance & Semantic Verification"])
 
 
-def require_admin_or_finance(x_user_role: str = Header("ADMINISTRATION")) -> str:
+def require_admin_or_finance(role: str = Depends(get_current_user_role)) -> str:
     allowed = {
         UserRoleEnum.ADMINISTRATION.value,
         UserRoleEnum.FINANCE_DIRECTOR.value,
         UserRoleEnum.SYSTEM_ADMINISTRATOR.value
     }
-    if x_user_role not in allowed:
+    if role not in allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Akses ditolak: Hanya staf Administrasi atau Direktur Keuangan yang berwenang menggunakan fitur AI."
         )
-    return x_user_role
+    return role
 
 
 @router.post("/imports/{id}/suggest-mapping", response_model=CandidateMappingProposal)
@@ -92,7 +93,7 @@ async def ai_audit_revision(
     id: UUID,
     db: AsyncSession = Depends(get_db),
     actor_role: str = Depends(require_admin_or_finance),
-    x_actor_name: str = Header("Petugas Administrasi")
+    actor_name: str = Depends(get_current_actor_name)
 ):
     """Performs cross-document semantic discrepancy auditing across revision items,
     identifying brand substitutions, unit mismatches, or spec contradictions (PRD FR05, AT16).
@@ -100,7 +101,7 @@ async def ai_audit_revision(
     audit_resp = await SemanticDiscrepancyAuditor.audit_revision(
         db=db,
         revision_id=id,
-        actor_name=x_actor_name
+        actor_name=actor_name
     )
     return audit_resp
 

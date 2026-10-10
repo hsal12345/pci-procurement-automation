@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { UploadCloud, FileSpreadsheet, AlertTriangle, CheckCircle2, X, Loader2, Sparkles } from "lucide-react";
+import { getAuthToken, getCurrentActorName, getCurrentRole } from "@/lib/api-client";
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -41,12 +42,18 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
       formData.append("quarter", String(quarter));
       formData.append("fund_source", fundSource);
 
+      const token = getAuthToken();
+      const authHeaders: Record<string, string> = {
+        "X-User-Role": getCurrentRole(),
+        "X-Actor-Name": getCurrentActorName(),
+      };
+      if (token) {
+        authHeaders["Authorization"] = `Bearer ${token}`;
+      }
+
       const res = await fetch("/api/v1/imports/upload", {
         method: "POST",
-        headers: {
-          "X-User-Role": "ADMINISTRATION",
-          "X-Actor-Name": "Staf Administrasi",
-        },
+        headers: authHeaders,
         body: formData,
       });
 
@@ -61,9 +68,8 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
       const confirmRes = await fetch(`/api/v1/imports/${uploadData.import_id}/confirm`, {
         method: "POST",
         headers: {
+          ...authHeaders,
           "Content-Type": "application/json",
-          "X-User-Role": "ADMINISTRATION",
-          "X-Actor-Name": "Staf Administrasi",
         },
         body: JSON.stringify({
           funding_source_code: fundSource,

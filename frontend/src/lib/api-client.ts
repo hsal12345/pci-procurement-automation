@@ -6,12 +6,71 @@ import { SemanticAuditResponse, AIUsageResponse, CandidateMappingProposal } from
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
-// Role Management for Dev / Simulation
+export interface AuthUser {
+  id: string;
+  username: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  is_active: boolean;
+  last_login_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+}
+
+const TOKEN_STORAGE_KEY = "pci_auth_token";
+const USER_STORAGE_KEY = "pci_auth_user";
 const ROLE_STORAGE_KEY = "pci_user_role";
 const ACTOR_STORAGE_KEY = "pci_actor_name";
 
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+export function getCurrentUser(): AuthUser | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(USER_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthSession(token: string, user: AuthUser): void {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+    localStorage.setItem(ROLE_STORAGE_KEY, user.role);
+    localStorage.setItem(ACTOR_STORAGE_KEY, user.full_name);
+    window.dispatchEvent(new Event("pci_role_changed"));
+    window.dispatchEvent(new Event("pci_auth_changed"));
+  }
+}
+
+export function clearAuthSession(): void {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.removeItem(ROLE_STORAGE_KEY);
+    localStorage.removeItem(ACTOR_STORAGE_KEY);
+    window.dispatchEvent(new Event("pci_role_changed"));
+    window.dispatchEvent(new Event("pci_auth_changed"));
+  }
+}
+
 export function getCurrentRole(): UserRole {
   if (typeof window === "undefined") return "ADMINISTRATION";
+  const user = getCurrentUser();
+  if (user?.role) return user.role;
   return (localStorage.getItem(ROLE_STORAGE_KEY) as UserRole) || "ADMINISTRATION";
 }
 
@@ -24,6 +83,8 @@ export function setCurrentRole(role: UserRole): void {
 
 export function getCurrentActorName(): string {
   if (typeof window === "undefined") return "Staf Administrasi";
+  const user = getCurrentUser();
+  if (user?.full_name) return user.full_name;
   return localStorage.getItem(ACTOR_STORAGE_KEY) || "Staf Administrasi";
 }
 
@@ -49,7 +110,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const url = `${API_BASE}${endpoint}`;
   const headers = new Headers(options.headers || {});
 
-  // Inject RBAC simulation headers
+  const token = getAuthToken();
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
   const role = getCurrentRole();
   const actor = getCurrentActorName();
   headers.set("X-User-Role", role);
@@ -72,6 +137,14 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     } catch {
       // ignore
     }
+
+    if (res.status === 401 && !endpoint.includes("/auth/login")) {
+      clearAuthSession();
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    }
+
     throw new ApiError(res.status, errorDetail, errData);
   }
 
@@ -84,6 +157,63 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const apiClient = {
+  // Authentication & RBAC User Management
+  login: (username_or_email: string, password: string) =>
+    request<LoginResponse>("/api/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username_or_email, password }),
+    }),
+
+  getMe: () => request<AuthUser>("/api/v1/auth/me"),
+
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ message: string }>("/api/v1/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
+  getUsers: (params?: { role?: string; search?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.role && params.role !== "ALL") q.set("role", params.role);
+    if (params?.search) q.set("search", params.search);
+    const qs = q.toString();
+    return request<AuthUser[]>(`/api/v1/users${qs ? `?${qs}` : ""}`);
+  },
+
+  createUser: (payload: {
+    username: string;
+    email: string;
+    full_name: string;
+    password: string;
+    role: UserRole;
+    is_active?: boolean;
+  }) =>
+    request<AuthUser>("/api/v1/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateUser: (
+    id: string,
+    payload: {
+      username?: string;
+      email?: string;
+      full_name?: string;
+      password?: string;
+      role?: UserRole;
+      is_active?: boolean;
+    }
+  ) =>
+    request<AuthUser>(`/api/v1/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteUser: (id: string) =>
+    request<{ message: string; user_id: string }>(`/api/v1/users/${id}`, {
+      method: "DELETE",
+    }),
+
   // Packages & Revisions
   getPackages: () => request<PackageItem[]>("/api/v1/packages"),
   getPackage: (id: string) => request<PackageItem>(`/api/v1/packages/${id}`),

@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from app.api.deps import get_current_actor_name, get_current_user_role
 from app.config import settings
 from app.database import get_db
 from app.models.imports import ImportRecord
@@ -22,11 +23,19 @@ import_service = ExcelImportService()
 @router.post("/upload", response_model=ImportUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_excel_import(
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Uploads an .xlsx workbook, securely parses structural content,
     and stores candidate JSON with detected discrepancies.
     """
+    if role not in ("ADMINISTRATION", "SYSTEM_ADMINISTRATOR"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Akses ditolak: Hanya staf Administrasi atau Administrator Sistem yang dapat mengimpor spreadsheet.",
+        )
+
     if not file.filename.endswith(".xlsx"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -55,6 +64,7 @@ async def upload_excel_import(
         original_filename=file.filename,
         file_hash=file_hash,
         file_size=file_size,
+        uploader=actor_name,
         status="PARSED",
         candidate_payload=parsed_result,
         sheet_metadata={"sheet_names": parsed_result["sheet_names"]},
@@ -101,11 +111,18 @@ async def get_import_preview(id: UUID, db: AsyncSession = Depends(get_db)):
 async def confirm_import_and_create_package(
     id: UUID,
     request: ImportConfirmRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
 ):
     """Commits confirmed candidate data into a new package and Revision 1.
     Snapshots master data immutably and recalculates exact financial totals.
     """
+    if role not in ("ADMINISTRATION", "SYSTEM_ADMINISTRATOR"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Akses ditolak: Hanya staf Administrasi atau Administrator Sistem yang dapat mengonfirmasi impor.",
+        )
+
     result = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
     rec = result.scalar_one_or_none()
     if not rec or not rec.candidate_payload:

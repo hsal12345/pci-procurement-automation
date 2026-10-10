@@ -10,8 +10,12 @@ from app.api.v1.logistics import router as logistics_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.internal.archive import router as internal_archive_router
 from app.api.v1.ai import router as ai_router
+from app.api.v1.auth import router as auth_router
+from app.api.v1.users import router as users_router
 
 api_v1_router = APIRouter()
+api_v1_router.include_router(auth_router)
+api_v1_router.include_router(users_router)
 api_v1_router.include_router(masters_router)
 api_v1_router.include_router(imports_router)
 api_v1_router.include_router(packages_router)
@@ -24,4 +28,5 @@ api_v1_router.include_router(logistics_router)
 api_v1_router.include_router(audit_router)
 api_v1_router.include_router(internal_archive_router)
 api_v1_router.include_router(ai_router)
+
 

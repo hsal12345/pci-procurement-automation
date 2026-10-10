@@ -5,6 +5,8 @@ from sqlalchemy import select
 from app.database import async_engine, AsyncSessionLocal, Base
 import app.models  # noqa: F401
 from app.models.masters import School, OfficialAppointment, Company, CompanyOfficial
+from app.models.users import User
+from app.core.security import hash_password
 
 
 async def seed():
@@ -192,10 +194,60 @@ async def seed():
             ))
             print("Seeded PT. SARANA EDUKASI NUSANTARA")
 
+        # 5. Default RBAC User Accounts
+        default_users = [
+            {
+                "username": "sysadmin",
+                "email": "sysadmin@pci.co.id",
+                "full_name": "Administrator Sistem",
+                "role": "SYSTEM_ADMINISTRATOR",
+                "password": "Admin123!",
+            },
+            {
+                "username": "admin",
+                "email": "administrasi@pci.co.id",
+                "full_name": "Staf Administrasi Pengadaan",
+                "role": "ADMINISTRATION",
+                "password": "Admin123!",
+            },
+            {
+                "username": "direktur",
+                "email": "direktur@pci.co.id",
+                "full_name": "Bambang Solifian",
+                "role": "FINANCE_DIRECTOR",
+                "password": "Admin123!",
+            },
+            {
+                "username": "logistik",
+                "email": "logistik@pci.co.id",
+                "full_name": "Petugas Logistik & Pengiriman",
+                "role": "LOGISTICS",
+                "password": "Admin123!",
+            },
+        ]
+
+        for u_data in default_users:
+            existing_u = (
+                await session.execute(select(User).where(User.username == u_data["username"]))
+            ).scalar_one_or_none()
+            if not existing_u:
+                session.add(
+                    User(
+                        username=u_data["username"],
+                        email=u_data["email"],
+                        full_name=u_data["full_name"],
+                        password_hash=hash_password(u_data["password"]),
+                        role=u_data["role"],
+                        is_active=True,
+                    )
+                )
+                print(f"Seeded default user: {u_data['username']} ({u_data['role']})")
+
         await session.commit()
         print("Database seeding completed successfully.")
 
 
 if __name__ == "__main__":
     asyncio.run(seed())
+
 

@@ -47,12 +47,18 @@ from app.models.archive import (
 from app.models.ai import (
     AIUsageLog,
 )
+from app.models.users import (
+    User,
+    VALID_USER_ROLES,
+)
 
 __all__ = [
     "Base",
     "BaseModel",
     "GUID",
+    "TZDateTime",
     "Company",
+    "CompanyOfficial",
     "School",
     "OfficialAppointment",
     "Item",
@@ -79,4 +85,7 @@ __all__ = [
     "LogisticsEvidence",
     "ArchiveRecord",
     "AIUsageLog",
+    "User",
+    "VALID_USER_ROLES",
 ]
+
