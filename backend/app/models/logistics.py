@@ -2,14 +2,13 @@ from datetime import datetime
 from sqlalchemy import (
     Column,
     Date,
-    DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
 )
 from sqlalchemy.orm import relationship
-from app.models.base import BaseModel, GUID
+from app.models.base import BaseModel, GUID, TZDateTime
 
 
 class LogisticsRecord(BaseModel):
@@ -24,9 +23,10 @@ class LogisticsRecord(BaseModel):
     inspection_status = Column(String(32), default="PENDING", nullable=False)  # PENDING, PASSED, FAILED
     inspection_notes = Column(Text, nullable=True)
     inspected_by = Column(String(128), nullable=True)
-    inspected_at = Column(DateTime(timezone=True), nullable=True)
+    inspected_at = Column(TZDateTime, nullable=True)
 
     revision = relationship("PackageRevision", back_populates="logistics_record")
+
 
 
 class LogisticsEvidence(BaseModel):

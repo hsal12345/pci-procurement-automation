@@ -2,14 +2,13 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
 )
 from sqlalchemy.orm import relationship
-from app.models.base import BaseModel, GUID
+from app.models.base import BaseModel, GUID, TZDateTime
 
 
 class ValidationRun(BaseModel):
@@ -17,7 +16,7 @@ class ValidationRun(BaseModel):
 
     revision_id = Column(GUID, ForeignKey("package_revisions.id", ondelete="CASCADE"), nullable=False, index=True)
     triggered_by = Column(String(100), nullable=True)
-    run_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    run_at = Column(TZDateTime, default=datetime.utcnow, nullable=False)
     passed = Column(Boolean, default=False, nullable=False)
     error_count = Column(Integer, default=0, nullable=False)
     warning_count = Column(Integer, default=0, nullable=False)
@@ -25,6 +24,7 @@ class ValidationRun(BaseModel):
 
     revision = relationship("PackageRevision", back_populates="validation_runs")
     findings = relationship("Finding", back_populates="run", cascade="all, delete-orphan")
+
 
 
 class Finding(BaseModel):

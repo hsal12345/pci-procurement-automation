@@ -46,7 +46,7 @@ export function SchoolModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
 
   useEffect(() => {
     if (isOpen) {
@@ -63,7 +63,7 @@ export function SchoolModal({
         if (initialSchool.letterhead_path) {
           const fullPath = initialSchool.letterhead_path.startsWith("http")
             ? initialSchool.letterhead_path
-            : `${apiBase}${initialSchool.letterhead_path}`;
+            : `${apiBase}/${initialSchool.letterhead_path.replace(/^\/+/, "")}`;
           setPreviewUrl(fullPath);
         } else {
           setPreviewUrl(null);

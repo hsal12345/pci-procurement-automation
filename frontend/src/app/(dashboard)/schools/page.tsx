@@ -304,7 +304,7 @@ export default function SchoolsPage() {
   const [officialTargetSchool, setOfficialTargetSchool] = useState<any | null>(null);
   const [selectedOfficial, setSelectedOfficial] = useState<any | null>(null);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
 
   const { data: schools = [], isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ["schools"],

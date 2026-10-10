@@ -145,7 +145,7 @@ async def upload_company_logo(id: UUID, file: UploadFile = File(...), db: AsyncS
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    rel_path = f"storage/uploads/letterheads/companies/{filename}"
+    rel_path = f"/storage/uploads/letterheads/companies/{filename}"
     company.logo_path = rel_path
     await db.commit()
     await db.refresh(company)
@@ -255,7 +255,7 @@ async def upload_school_letterhead(id: UUID, file: UploadFile = File(...), db: A
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    rel_path = f"storage/uploads/letterheads/schools/{filename}"
+    rel_path = f"/storage/uploads/letterheads/schools/{filename}"
     school.letterhead_path = rel_path
     await db.commit()
     await db.refresh(school)

@@ -38,7 +38,12 @@ class PdfService:
     """Handles conversion from DOCX to PDF, watermark application, and PDF merging."""
 
     def __init__(self, libreoffice_path: Optional[str] = None):
-        self.lo_path = libreoffice_path or settings.LIBREOFFICE_PATH
+        candidate = libreoffice_path or settings.LIBREOFFICE_PATH
+        if not Path(candidate).exists():
+            detected = shutil.which("soffice") or shutil.which("libreoffice")
+            if detected:
+                candidate = detected
+        self.lo_path = candidate
         if not Path(self.lo_path).exists():
             raise FileNotFoundError(
                 f"Headless LibreOffice binary not found at '{self.lo_path}'. "

@@ -26,7 +26,7 @@ export default function CompaniesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<any | null>(null);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
 
   const { data: companies = [], isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ["companies"],
@@ -137,7 +137,7 @@ export default function CompaniesPage() {
               const fullLogoUrl = cp.logo_path
                 ? cp.logo_path.startsWith("http")
                   ? cp.logo_path
-                  : `${apiBase}${cp.logo_path}`
+                  : `${apiBase}/${cp.logo_path.replace(/^\/+/, "")}`
                 : null;
 
               return (

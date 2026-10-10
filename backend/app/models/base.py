@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.types import TypeDecorator, CHAR
@@ -23,7 +23,7 @@ class GUID(TypeDecorator):
         if value is None:
             return value
         elif dialect.name == "postgresql":
-            return str(value) if isinstance(value, uuid.UUID) else value
+            return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
         else:
             if not isinstance(value, uuid.UUID):
                 return str(uuid.UUID(value))
@@ -37,14 +37,33 @@ class GUID(TypeDecorator):
         return value
 
 
+class TZDateTime(TypeDecorator):
+    """Timezone-safe DateTime type for PostgreSQL (asyncpg/psycopg2) and SQLite.
+    Automatically normalizes naive datetimes to UTC timezone-aware datetimes on bind.
+    """
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None and isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+        return value
+
+
+def utcnow_aware() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class BaseModel(Base):
     __abstract__ = True
 
     id = Column(GUID, primary_key=True, default=uuid.uuid4)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    created_at = Column(TZDateTime, default=utcnow_aware, nullable=False)
     updated_at = Column(
-        DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        TZDateTime,
+        default=utcnow_aware,
+        onupdate=utcnow_aware,
         nullable=False,
     )
+

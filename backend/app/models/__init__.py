@@ -1,6 +1,7 @@
-from app.models.base import Base, BaseModel, GUID
+from app.models.base import Base, BaseModel, GUID, TZDateTime
 from app.models.masters import (
     Company,
+    CompanyOfficial,
     School,
     OfficialAppointment,
     Item,
