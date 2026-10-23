@@ -146,7 +146,7 @@ function SchoolCard({
         {/* Address & Contact info */}
         <div className="space-y-1 text-xs">
           <div className="flex items-start gap-1.5 text-muted-foreground">
-            <MapPin className="w-3.5 h-3.5 mt-0.5 text-slate-400 flex-shrink-0" />
+            <MapPin className="w-3.5 h-3.5 mt-0.5 text-muted-foreground flex-shrink-0" />
             <span className="leading-snug">
               {school.address}
               {school.subdistrict ? `, Kec. ${school.subdistrict}` : ""}
@@ -159,13 +159,13 @@ function SchoolCard({
             <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] font-mono text-muted-foreground">
               {school.phone && (
                 <div className="flex items-center gap-1">
-                  <Phone className="w-3 h-3 text-slate-400" />
+                  <Phone className="w-3 h-3 text-muted-foreground" />
                   <span>{school.phone}</span>
                 </div>
               )}
               {school.email && (
                 <div className="flex items-center gap-1">
-                  <Mail className="w-3 h-3 text-slate-400" />
+                  <Mail className="w-3 h-3 text-muted-foreground" />
                   <span className="text-sky-400">{school.email}</span>
                 </div>
               )}
@@ -176,7 +176,7 @@ function SchoolCard({
         {/* Officials Section */}
         <div className="pt-2 border-t border-border/60 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
               <UserCheck className="w-3.5 h-3.5 text-blue-400" />
               Pejabat Penandatangan ({officials.length})
             </span>
@@ -210,13 +210,13 @@ function SchoolCard({
               {officials.map((off: any) => {
                 const roleMeta = ROLE_LABELS[off.role] || {
                   label: off.role,
-                  color: "bg-slate-500/15 text-slate-300 border-slate-500/30",
+                  color: "bg-slate-500/15 text-foreground border-slate-500/30",
                 };
 
                 return (
                   <div
                     key={off.id}
-                    className="p-2 rounded bg-muted/30 border border-border/60 flex items-start justify-between gap-2 hover:border-slate-600 transition"
+                    className="p-2 rounded bg-muted/30 border border-border/60 flex items-start justify-between gap-2 hover:border-border transition"
                   >
                     <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -232,7 +232,7 @@ function SchoolCard({
                       <div className="flex flex-wrap items-center gap-x-2 text-[10px] font-mono text-muted-foreground">
                         {off.nip && (
                           <span>
-                            NIP: <span className="text-slate-300">{off.nip}</span>
+                            NIP: <span className="text-foreground">{off.nip}</span>
                           </span>
                         )}
                         {off.position_sk_number && (

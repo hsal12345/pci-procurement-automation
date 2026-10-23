@@ -4,34 +4,72 @@
 
 @layer base {
   :root {
-    /* Elevated Slate Enterprise Theme - Brighter, Crisp Contrast & Readable */
-    --background: 222 22% 14.5%;
-    --foreground: 210 40% 98%;
+    /* Pustaka Cemerlang Official Theme - Light Corporate Mode (Default) */
+    --background: 210 33% 98%;
+    --foreground: 215 25% 15%;
 
-    --card: 222 20% 19%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 15%;
 
-    --popover: 222 20% 21%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 15%;
 
-    --primary: 217 91% 60%;
+    /* Pustaka Cemerlang Signature Royal Blue (#02569D) */
+    --primary: 208 97% 31%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 222 18% 24%;
-    --secondary-foreground: 210 40% 98%;
+    /* Pustaka Cemerlang Signature Tangerine Orange (#FE6307) */
+    --secondary: 22 99% 51%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 222 18% 22%;
-    --muted-foreground: 215 22% 76%;
+    --muted: 214 32% 93%;
+    --muted-foreground: 215 16% 47%;
 
-    --accent: 222 20% 26%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 208 75% 95%;
+    --accent-foreground: 208 97% 31%;
 
-    --destructive: 0 84% 60%;
+    /* Pustaka Cemerlang Berry Accent (#E22658) */
+    --destructive: 344 76% 52%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 222 16% 30%;
-    --input: 222 16% 28%;
-    --ring: 217 91% 65%;
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 208 97% 31%;
+
+    --radius: 0.375rem;
+  }
+
+  .dark {
+    /* Pustaka Cemerlang Midnight Corporate Theme */
+    --background: 215 45% 9%;
+    --foreground: 210 40% 98%;
+
+    --card: 215 40% 13%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 215 40% 15%;
+    --popover-foreground: 210 40% 98%;
+
+    /* High-contrast Pustaka Cemerlang Royal Blue in Dark Mode */
+    --primary: 208 92% 48%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Pustaka Cemerlang Tangerine Orange in Dark Mode */
+    --secondary: 22 99% 51%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 215 35% 18%;
+    --muted-foreground: 215 20% 70%;
+
+    --accent: 215 35% 22%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 344 76% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 30% 22%;
+    --input: 215 30% 22%;
+    --ring: 208 92% 55%;
 
     --radius: 0.375rem;
   }
@@ -42,7 +80,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased selection:bg-primary/30 selection:text-white;
+    @apply bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary;
     font-feature-settings: "rlig" 1, "calt" 1, "tnum" 1;
   }
 }
@@ -53,7 +91,7 @@
 }
 
 .dense-header {
-  @apply h-8 px-2 py-1 text-[11px] font-semibold tracking-wide uppercase text-slate-200 bg-muted/70 border-r border-b border-border select-none;
+  @apply h-8 px-2 py-1 text-[11px] font-semibold tracking-wide uppercase text-foreground/80 bg-muted/80 border-r border-b border-border select-none;
 }
 
 /* Custom compact scrollbars */
@@ -69,5 +107,5 @@
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.6);
+  background: hsl(var(--primary) / 0.7);
 }

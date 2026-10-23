@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import Providers from "./providers";
@@ -14,9 +14,21 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
+export const viewport: Viewport = {
+  themeColor: "#02569D",
+};
+
 export const metadata: Metadata = {
   title: "PCI Procurement & SPJ System | CV Pustaka Cemerlang Indonesia",
-  description: "Enterprise procurement, document generation, and SPJ verification system",
+  description: "Sistem Otomasi Pengadaan Barang/Jasa & Dokumen SPJ Resmi CV Pustaka Cemerlang Indonesia",
+  icons: {
+    icon: [
+      { url: "/images/pci-icon.png", sizes: "32x32", type: "image/png" },
+      { url: "/images/pci-icon.png", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/images/pci-icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -25,9 +37,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id" className="dark">
+    <html lang="id" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const storedTheme = localStorage.getItem('pci_theme');
+                if (storedTheme === 'dark') {
+                  document.documentElement.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans bg-background text-foreground antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans bg-background text-foreground antialiased min-h-screen`}
         style={{
           // @ts-ignore
           "--font-inter": "var(--font-geist-sans)",
