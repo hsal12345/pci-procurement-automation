@@ -11,7 +11,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 EXTERNAL_LINK_REGEX = re.compile(r"(\[\d+\]|\.xlsx?!|#REF!|#VALUE!|#NAME\?)", re.IGNORECASE)
 
 TABLE_HEADER_TOKENS = {
-    "no", "nama barang", "uraian", "volume", "banyaknya", "satuan", "spesifikasi", "harga"
+    "no", "nama barang", "uraian", "deskripsi", "volume", "banyaknya", "kuantitas", "qty", "satuan", "spesifikasi", "spek", "harga", "hps", "total", "jumlah"
 }
 TABLE_TERMINAL_TOKENS = {
     "jumlah", "total", "subtotal"
@@ -193,7 +193,7 @@ class ExcelImportService:
         wb.save(buf)
         return buf.getvalue()
 
-    def parse_workbook(self, file_path: Path) -> Dict[str, Any]:
+    def parse_workbook(self, file_path: Path, column_mapping: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
         """Loads and parses the reference Excel workbook safely in data_only and formula modes."""
         wb_data = openpyxl.load_workbook(file_path, data_only=True, read_only=False)
         wb_form = openpyxl.load_workbook(file_path, data_only=False, read_only=False)
@@ -207,7 +207,7 @@ class ExcelImportService:
 
         school_candidate = self._extract_school_header(ws_hps_data)
         transaction_metadata = self._extract_transaction_metadata(ws_hps_data)
-        candidate_lines = self._extract_line_items(ws_hps_data, ws_hps_form)
+        candidate_lines = self._extract_line_items(ws_hps_data, ws_hps_form, column_mapping=column_mapping)
 
         # 2. Invariant Discrepancy Scanning across all sheets
         discrepancies = self._scan_all_sheet_invariants(
@@ -304,15 +304,45 @@ class ExcelImportService:
 
         return meta
 
-    def _extract_line_items(self, ws_data, ws_form) -> List[Dict[str, Any]]:
+    def _extract_line_items(
+        self,
+        ws_data,
+        ws_form,
+        column_mapping: Optional[Dict[str, int]] = None
+    ) -> List[Dict[str, Any]]:
         """Bidirectional heuristic table boundary discovery.
         Detects header row with >= 3 structural tokens, then reads downward
         until terminal subtotal sentinel or consecutive empty rows.
+        Maps 'Harga Satuan' accurately to hps_unit_price rather than unit of measure.
         """
         header_row = None
-        col_map = {}
+        col_map: Dict[str, int] = {}
 
-        # 1. Discover header row
+        # 1. Seed custom column mapping if explicitly provided
+        if column_mapping:
+            for k, v in column_mapping.items():
+                k_norm = str(k).lower().replace("-", "_")
+                if k_norm in ["line_no", "no", "nomor"]:
+                    col_map["no"] = v
+                elif k_norm in ["description", "name", "nama", "nama_barang", "uraian"]:
+                    col_map["name"] = v
+                elif k_norm in ["quantity", "volume", "vol", "qty", "kuantitas"]:
+                    col_map["volume"] = v
+                elif k_norm in ["unit", "satuan"]:
+                    col_map["unit"] = v
+                elif k_norm in ["specification", "spec", "spek", "spesifikasi"]:
+                    col_map["spec"] = v
+                elif k_norm in ["hps_price", "hps_unit_price", "price", "harga_satuan", "harga_hps", "hps"]:
+                    col_map["hps_price"] = v
+                    col_map["price"] = v
+                elif k_norm in ["offer_price", "offer_unit_price", "harga_penawaran", "penawaran"]:
+                    col_map["offer_price"] = v
+                elif k_norm in ["final_price", "final_unit_price", "harga_final", "harga_negosiasi", "negosiasi"]:
+                    col_map["final_price"] = v
+                elif k_norm in ["total", "line_total", "total_price", "jumlah", "jumlah_total"]:
+                    col_map["total"] = v
+
+        # 2. Discover header row
         for r in range(1, min(ws_data.max_row + 1, 30)):
             row_tokens = {}
             for c in range(1, min(ws_data.max_column + 1, 15)):
@@ -323,29 +353,56 @@ class ExcelImportService:
 
             if len(row_tokens) >= 3:
                 header_row = r
-                # map discovered columns
+                # map discovered columns (only setdefault to preserve explicit mapping if given)
                 for c in range(1, min(ws_data.max_column + 1, 15)):
                     val = str(ws_data.cell(row=r, column=c).value or "").strip().lower()
-                    if "no" == val:
-                        col_map["no"] = c
-                    elif "nama barang" in val or "uraian" in val:
-                        col_map["name"] = c
-                    elif "volume" in val or "banyaknya" in val:
-                        col_map["volume"] = c
-                    elif "satuan" in val:
-                        col_map["unit"] = c
-                    elif "spesifikasi" in val:
-                        col_map["spec"] = c
-                    elif "harga" in val and "total" not in val:
-                        col_map["price"] = c
-                    elif "total" in val or "jumlah" in val:
-                        col_map["total"] = c
+                    if not val:
+                        continue
+                    if val in ["no", "nomor", "#", "no.", "no / urut"] or val.startswith("no."):
+                        col_map.setdefault("no", c)
+                    elif "nama barang" in val or "uraian" in val or "deskripsi" in val or "nama item" in val or (
+                        "nama" in val and not any(k in val for k in ["sekolah", "perusahaan", "pt", "cv", "harga", "kepala", "bendahara", "petugas"])
+                    ):
+                        col_map.setdefault("name", c)
+                    elif "volume" in val or "banyaknya" in val or "kuantitas" in val or val in ["vol", "qty", "kuantum"] or (
+                        "jumlah" in val and not any(k in val for k in ["harga", "total", "biaya", "rp", "subtotal"])
+                    ):
+                        col_map.setdefault("volume", c)
+                    # NOTE: Ensure 'Harga Satuan' is NEVER matched as unit of measure
+                    elif ("satuan" in val and not any(k in val for k in ["harga", "biaya", "tarif"])) or val in ["sat", "sat.", "unit", "uom"]:
+                        col_map.setdefault("unit", c)
+                    elif "spesifikasi" in val or "spek" in val or "keterangan" in val or "ukuran" in val:
+                        col_map.setdefault("spec", c)
+                    elif "harga penawaran" in val or ("penawaran" in val and "harga" in val) or "harga rekanan" in val:
+                        col_map.setdefault("offer_price", c)
+                    elif "harga negosiasi" in val or "harga final" in val or "harga kesepakatan" in val or ("negosiasi" in val and "harga" in val):
+                        col_map.setdefault("final_price", c)
+                    # Maps 'Harga Satuan', 'Harga HPS', 'Harga', etc. directly to HPS unit price
+                    elif "harga satuan" in val or "harga hps" in val or "harga pagu" in val or "hps" in val or "harga perkiraan" in val or (
+                        "harga" in val and not any(k in val for k in ["total", "jumlah", "penawaran", "negosiasi", "final", "kesepakatan"])
+                    ):
+                        col_map.setdefault("hps_price", c)
+                        col_map.setdefault("price", c)
+                    elif "total" in val or "jumlah total" in val or "jumlah harga" in val or "subtotal" in val or (
+                        "jumlah" in val and any(k in val for k in ["harga", "rp", "total"])
+                    ):
+                        col_map.setdefault("total", c)
                 break
 
         if not header_row:
             header_row = 16  # fallback default KK09
 
-        # 2. Read dynamic line items
+        # Dynamic column indices with intelligent fallback for standard and KK09 layouts
+        c_name = col_map.get("name", 3)
+        c_vol = col_map.get("volume", 6)
+        c_unit = col_map.get("unit") or (4 if col_map.get("volume") == 3 else 7)
+        c_spec = col_map.get("spec", 8)
+        c_hps = col_map.get("hps_price") or col_map.get("price") or (6 if c_unit == 4 else 9)
+        c_offer = col_map.get("offer_price")
+        c_final = col_map.get("final_price")
+        c_total = col_map.get("total", 10 if c_hps == 9 else 7)
+
+        # 3. Read dynamic line items
         lines: List[Dict[str, Any]] = []
         consecutive_empty = 0
         line_num = 1
@@ -369,15 +426,6 @@ class ExcelImportService:
                 continue
             consecutive_empty = 0
 
-            # Extract fields
-            # Heuristic fallback based on known row layout if col_map has gaps
-            c_name = col_map.get("name", 3)
-            c_vol = col_map.get("volume", 6)
-            c_unit = col_map.get("unit", 7)
-            c_spec = col_map.get("spec", 8)
-            c_price = col_map.get("price", 9)
-            c_total = col_map.get("total", 10)
-
             name_val = ws_data.cell(row=r, column=c_name).value
             if not name_val:
                 # Try search across row for text
@@ -392,29 +440,41 @@ class ExcelImportService:
 
             vol_val = ws_data.cell(row=r, column=c_vol).value or 1
             unit_val = ws_data.cell(row=r, column=c_unit).value or "buah"
-            spec_val = ws_data.cell(row=r, column=c_spec).value or ""
-            price_val = ws_data.cell(row=r, column=c_price).value or 0
-            total_val = ws_data.cell(row=r, column=c_total).value or 0
+            spec_val = ws_data.cell(row=r, column=c_spec).value if c_spec else ""
+            hps_val = ws_data.cell(row=r, column=c_hps).value if c_hps else 0
+            offer_val = ws_data.cell(row=r, column=c_offer).value if c_offer else None
+            final_val = ws_data.cell(row=r, column=c_final).value if c_final else None
+            total_val = ws_data.cell(row=r, column=c_total).value if c_total else 0
 
             # Check if formula contains external links
             raw_formula = ws_form.cell(row=r, column=c_name).value
 
             try:
-                dec_vol = Decimal(str(vol_val))
+                dec_vol = Decimal(str(vol_val).replace(",", ".").strip() or "1")
             except Exception:
                 dec_vol = Decimal("1")
 
             try:
-                dec_price = Decimal(str(price_val))
+                dec_hps = Decimal(str(hps_val).replace(",", ".").strip() or "0")
             except Exception:
-                dec_price = Decimal("0")
+                dec_hps = Decimal("0")
 
             try:
-                dec_total = Decimal(str(total_val))
-                if dec_total == 0:
-                    dec_total = dec_vol * dec_price
+                dec_offer = Decimal(str(offer_val).replace(",", ".").strip()) if offer_val is not None else dec_hps
             except Exception:
-                dec_total = dec_vol * dec_price
+                dec_offer = dec_hps
+
+            try:
+                dec_final = Decimal(str(final_val).replace(",", ".").strip()) if final_val is not None else dec_offer
+            except Exception:
+                dec_final = dec_offer
+
+            try:
+                dec_total = Decimal(str(total_val).replace(",", ".").strip() or "0")
+                if dec_total == 0:
+                    dec_total = dec_vol * dec_final
+            except Exception:
+                dec_total = dec_vol * dec_final
 
             lines.append({
                 "line_number": line_num,
@@ -423,9 +483,10 @@ class ExcelImportService:
                 "specification": str(spec_val).strip() if spec_val else None,
                 "quantity": float(dec_vol),
                 "unit": str(unit_val).strip(),
-                "hps_unit_price": float(dec_price),
-                "offer_unit_price": float(dec_price),
-                "final_unit_price": float(dec_price),
+                "hps_unit_price": float(dec_hps),
+                "hps_price": float(dec_hps),
+                "offer_unit_price": float(dec_offer),
+                "final_unit_price": float(dec_final),
                 "discount": 0.0,
                 "line_total": float(dec_total),
                 "condition": "BAIK",

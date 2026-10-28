@@ -21,7 +21,7 @@ async def seed():
 
     async with AsyncSessionLocal() as session:
         # 1. School 1: SD NEGERI KEBON KOSONG 09
-        sc_kk09 = (await session.execute(select(School).where(School.name.like("%KEBON KOSONG%")))).scalar_one_or_none()
+        sc_kk09 = (await session.execute(select(School).where(School.name.like("%KEBON KOSONG%")))).scalars().first()
         if not sc_kk09:
             sc_kk09 = School(
                 name="SD NEGERI KEBON KOSONG 09",
@@ -78,7 +78,7 @@ async def seed():
             print("Updated officials SK for SD NEGERI KEBON KOSONG 09")
 
         # 2. School 2: SDN CEMPAKA PUTIH 01 (for testing school switching)
-        sc_cp01 = (await session.execute(select(School).where(School.name.like("%CEMPAKA PUTIH%")))).scalar_one_or_none()
+        sc_cp01 = (await session.execute(select(School).where(School.name.like("%CEMPAKA PUTIH%")))).scalars().first()
         if not sc_cp01:
             sc_cp01 = School(
                 name="SDN CEMPAKA PUTIH BARAT 01",
@@ -122,7 +122,7 @@ async def seed():
             print("Seeded officials for SDN CEMPAKA PUTIH BARAT 01")
 
         # 3. Company 1: CV. PUSTAKA CEMERLANG INDONESIA
-        cp_pci = (await session.execute(select(Company).where(Company.legal_name.like("%PUSTAKA CEMERLANG%")))).scalar_one_or_none()
+        cp_pci = (await session.execute(select(Company).where(Company.legal_name.like("%PUSTAKA CEMERLANG%")))).scalars().first()
         if not cp_pci:
             cp_pci = Company(
                 legal_name="CV. PUSTAKA CEMERLANG INDONESIA",
@@ -155,7 +155,7 @@ async def seed():
             cp_pci.director_sk_number = "Akta Notaris No. 12 Th 2020"
             if has_company_kop and not cp_pci.logo_path:
                 cp_pci.logo_path = default_company_kop
-            cp_off = (await session.execute(select(CompanyOfficial).where(CompanyOfficial.company_id == cp_pci.id))).scalar_one_or_none()
+            cp_off = (await session.execute(select(CompanyOfficial).where(CompanyOfficial.company_id == cp_pci.id))).scalars().first()
             if not cp_off:
                 session.add(CompanyOfficial(
                     company_id=cp_pci.id,
@@ -169,7 +169,7 @@ async def seed():
             print("Updated CV. PUSTAKA CEMERLANG INDONESIA")
 
         # 4. Company 2: PT. SARANA EDUKASI NUSANTARA (for testing company switching)
-        cp_sen = (await session.execute(select(Company).where(Company.legal_name.like("%SARANA EDUKASI%")))).scalar_one_or_none()
+        cp_sen = (await session.execute(select(Company).where(Company.legal_name.like("%SARANA EDUKASI%")))).scalars().first()
         if not cp_sen:
             cp_sen = Company(
                 legal_name="PT. SARANA EDUKASI NUSANTARA",
@@ -229,7 +229,7 @@ async def seed():
         for u_data in default_users:
             existing_u = (
                 await session.execute(select(User).where(User.username == u_data["username"]))
-            ).scalar_one_or_none()
+            ).scalars().first()
             if not existing_u:
                 session.add(
                     User(

@@ -326,9 +326,31 @@ async def confirm_import_and_create_package(
 
     for idx, l in enumerate(lines_data, start=1):
         qty = Decimal(str(l.get("quantity", 1)))
-        hps_price = Decimal(str(l.get("hps_unit_price", 0)))
-        offer_price = Decimal(str(l.get("offer_unit_price", 0)))
-        final_price = Decimal(str(l.get("final_unit_price", 0)))
+        hps_raw = (
+            l.get("hps_unit_price")
+            if l.get("hps_unit_price") is not None
+            else (l.get("hps_price") if l.get("hps_price") is not None else l.get("hps-unit-price"))
+        )
+        hps_price = Decimal(str(hps_raw or 0))
+
+        offer_raw = (
+            l.get("offer_unit_price")
+            if l.get("offer_unit_price") is not None
+            else (l.get("offer_price") if l.get("offer_price") is not None else l.get("offer-unit-price"))
+        )
+        offer_price = Decimal(str(offer_raw)) if offer_raw is not None else hps_price
+
+        final_raw = (
+            l.get("final_unit_price")
+            if l.get("final_unit_price") is not None
+            else (l.get("final_price") if l.get("final_price") is not None else l.get("final-unit-price"))
+        )
+        final_price = Decimal(str(final_raw)) if final_raw is not None else offer_price
+
+        if final_price == 0 and hps_price > 0:
+            final_price = hps_price
+        if offer_price == 0 and hps_price > 0:
+            offer_price = hps_price
         discount = Decimal(str(l.get("discount", 0)))
         line_tot = (qty * final_price) - discount
 
