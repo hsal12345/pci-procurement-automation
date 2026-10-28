@@ -9,6 +9,7 @@
 - **Main Dashboard:** `http://localhost:3000/packages`
 - **User Management Dashboard (SysAdmin only):** `http://localhost:3000/users`
 - **Backend API & Swagger Docs:** `http://localhost:8000/docs`
+- **DBeaver Web GUI (CloudBeaver):** `http://localhost:8978`
 
 ---
 
@@ -53,4 +54,34 @@ All default accounts can sign in using **either** their **Username** or **Email*
    - Enter a new password in the **Reset Kata Sandi** field or choose a new RBAC role, then click **Simpan Perubahan**.
 3. **Changing Your Own Password:**
    - Any logged-in user can click **Ubah Sandi** at the bottom of the left sidebar to update their own password.
+
+---
+
+## 5. Database & Management Tools Access
+
+### A. DBeaver Web GUI (CloudBeaver) Portal Login
+- **URL:** `http://localhost:8978`
+- **Username:** `pci-admin`
+- **Password:** `mCSXjZT3VW6R6mh`
+
+### B. DBeaver Connection Configuration (Verified)
+Gunakan parameter berikut saat menambahkan koneksi database di dalam CloudBeaver:
+
+| Pengaturan Form | Nilai | Keterangan |
+| :--- | :--- | :--- |
+| **Driver** | `PostgreSQL` | Driver default |
+| **Configuration** | `Manual` | - |
+| **Host** | `db` | ⚠️ *Gunakan `db` (bukan `localhost`) agar terhubung via jaringan Docker* |
+| **Port** | `5432` | Port internal PostgreSQL |
+| **Database** | `pci_spjed` | Database utama proyek |
+| **Authentication model** | `Username/password` | - |
+| **User name** | `postgres` | User database default |
+| **User password** | `postgres` | Password database default |
+
+### C. Direct Connection from Host Machine (Desktop Apps: DBeaver Desktop / pgAdmin / TablePlus / psql)
+- **Host:** `localhost` atau `127.0.0.1`
+- **Port:** `5432`
+- **Database:** `pci_spjed`
+- **Username:** `postgres`
+- **Password:** `postgres`
 
