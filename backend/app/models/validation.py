@@ -31,7 +31,7 @@ class Finding(BaseModel):
     __tablename__ = "findings"
 
     run_id = Column(GUID, ForeignKey("validation_runs.id", ondelete="CASCADE"), nullable=False, index=True)
-    rule_code = Column(String(16), nullable=False, index=True)  # BR01..BR15
+    rule_code = Column(String(32), nullable=False, index=True)  # BR01..BR15, AI_SEMANTIC_DISCREPANCY
     severity = Column(String(16), nullable=False)  # BLOCK, WARNING, INFO
     doc_code = Column(String(32), nullable=True)  # D01..D13
     sheet_name = Column(String(64), nullable=True)

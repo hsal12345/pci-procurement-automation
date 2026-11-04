@@ -2,7 +2,7 @@ import { UserRole, PackageItem, PackageRevision, RevisionLine } from "@/types/pa
 import { ValidationRun } from "@/types/validation";
 import { LogisticsRecord, EvidenceAttachment } from "@/types/logistics";
 import { Artifact, GenerationJob } from "@/types/documents";
-import { SemanticAuditResponse, AIUsageResponse, CandidateMappingProposal } from "@/types/ai";
+import { SemanticAuditResponse, AIUsageResponse, CandidateMappingProposal, AIRuntimeConfig, AIRuntimeConfigUpdate, AITestConnectionRequest, AITestConnectionResponse, AIUsageLogItem, AIPlaygroundTestRequest, AIPlaygroundTestResponse } from "@/types/ai";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -341,6 +341,34 @@ export const apiClient = {
     }),
 
   getAIUsage: () => request<AIUsageResponse>("/api/v1/ai/usage"),
+
+  getAIRuntimeConfig: () => request<AIRuntimeConfig>("/api/v1/ai/config"),
+
+  updateAIRuntimeConfig: (data: AIRuntimeConfigUpdate) =>
+    request<AIRuntimeConfig>("/api/v1/ai/config", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  testAIConnection: (data?: AITestConnectionRequest) =>
+    request<AITestConnectionResponse>("/api/v1/ai/test-connection", {
+      method: "POST",
+      body: JSON.stringify(data || {}),
+    }),
+
+  getAIUsageLogs: (params?: { limit?: number; status?: string; task_type?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.status) q.set("status", params.status);
+    if (params?.task_type) q.set("task_type", params.task_type);
+    return request<AIUsageLogItem[]>(`/api/v1/ai/logs?${q.toString()}`);
+  },
+
+  runAIPlaygroundTest: (data: AIPlaygroundTestRequest) =>
+    request<AIPlaygroundTestResponse>("/api/v1/ai/playground/test", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   suggestAIMapping: (importId: string) =>
     request<CandidateMappingProposal>(`/api/v1/ai/imports/${importId}/suggest-mapping`, {

@@ -4,7 +4,7 @@ import openpyxl
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.ai import CandidateMappingProposal
-from app.services.ai.adapter import get_ai_adapter
+from app.services.ai.adapter import get_ai_adapter, MockAIAdapter
 from app.services.ai.budget_guard import AIBudgetGuard
 from app.services.ai.sanitizer import PIISanitizer
 
@@ -78,6 +78,7 @@ class AIMappingAssistant:
         )
 
         adapter = get_ai_adapter()
+        mock_adapter = MockAIAdapter()
 
         async def _run_task():
             return await adapter.complete_structured(
@@ -86,10 +87,18 @@ class AIMappingAssistant:
                 response_schema=CandidateMappingProposal
             )
 
+        async def _fallback_task():
+            return await mock_adapter.complete_structured(
+                system_prompt=cls.SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                response_schema=CandidateMappingProposal
+            )
+
         proposal, status, err_msg = await AIBudgetGuard.execute_guarded(
             db=db,
             task_type="MAPPING_ASSISTANT",
-            execute_fn=_run_task
+            execute_fn=_run_task,
+            fallback_fn=_fallback_task
         )
 
         if proposal:
