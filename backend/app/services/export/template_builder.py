@@ -21,10 +21,10 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent / "templates" / "d
 
 # Color Palette for Formal Documents
 COLOR_BORDER = "A0AEC0"       # Subtle slate border
-COLOR_HDR_BG = "EDF2F7"       # Soft grey/slate background
-COLOR_PRIMARY = RGBColor(26, 54, 93)   # Deep Navy for Kop
+COLOR_HDR_BG = "EBF4FB"  # Soft PCI Blue Tint       # Soft grey/slate background
+COLOR_PRIMARY = RGBColor(2, 86, 157)  # PCI Royal Blue (#02569D)   # Deep Navy for Kop
 COLOR_DARK = RGBColor(45, 55, 72)      # Charcoal for Body text
-COLOR_DRAFT = RGBColor(197, 48, 48)    # Crimson for draft banner
+COLOR_DRAFT = RGBColor(226, 38, 88)  # PCI Rose (#E22658)    # Crimson for draft banner
 
 
 def set_cell_margins(cell, top=120, bottom=120, left=140, right=140):

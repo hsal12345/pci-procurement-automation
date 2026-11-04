@@ -338,7 +338,7 @@ function PackagesListPage() {
                     <td className="px-3.5 py-2.5 font-mono whitespace-nowrap text-muted-foreground">
                       {pkg.fund_source}
                     </td>
-                    <td className="px-3.5 py-2.5 font-mono whitespace-nowrap text-slate-300">
+                    <td className="px-3.5 py-2.5 font-mono whitespace-nowrap text-muted-foreground">
                       Rev {latestRev?.revision_number || 1} (v{latestRev?.version || 1})
                     </td>
                     <td className="px-3.5 py-2.5 whitespace-nowrap">
@@ -438,13 +438,13 @@ function StatusBadge({ status }: { status: string }) {
   }
   if (status === "CANCELLED") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-700/50 text-slate-300 border border-slate-600/60">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-700/50 text-muted-foreground border border-slate-600/60">
         [ ✕ DIBATALKAN ]
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-muted text-slate-300 border border-border">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-muted text-muted-foreground border border-border">
       [ ⚪ DRAF ]
     </span>
   );

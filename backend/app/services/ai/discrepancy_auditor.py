@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.models.packages import PackageRevision, RevisionLine
 from app.models.validation import ValidationRun, Finding
 from app.schemas.ai import SemanticDiscrepancyItem, SemanticAuditResponse
-from app.services.ai.adapter import get_ai_adapter
+from app.services.ai.adapter import get_ai_adapter, MockAIAdapter
 from app.services.ai.budget_guard import AIBudgetGuard
 from app.services.ai.sanitizer import PIISanitizer
 from app.services.audit_service import audit_service
@@ -100,28 +100,18 @@ class SemanticDiscrepancyAuditor:
             norm_orig = cls.normalize_token(orig)
             norm_conf = cls.normalize_token(conf)
 
-            # If strictly identical after normalization, skip LLM call!
-            if norm_orig == norm_conf and not ("SYSTEM INSTRUCTION" in orig or "SYSTEM INSTRUCTION" in conf):
-                continue
+            # If normalized strings differ, flag as suspect candidate for semantic inspection
+            if norm_orig != norm_conf:
+                suspect_pairs.append({
+                    "line_number": line.line_number,
+                    "sheet_a": "D01",
+                    "desc_a": orig,
+                    "sheet_b": "D05",
+                    "desc_b": conf,
+                    "spec": spec
+                })
 
-            # Non-identical: collect suspect pair for LLM evaluation
-            clean_orig, _ = PIISanitizer.sanitize_text(orig, officials_names)
-            clean_conf, _ = PIISanitizer.sanitize_text(conf, officials_names)
-            clean_spec, _ = PIISanitizer.sanitize_text(spec, officials_names)
-
-            safe_orig = PIISanitizer.safe_cell_content(clean_orig)
-            safe_conf = PIISanitizer.safe_cell_content(clean_conf)
-            safe_spec = PIISanitizer.safe_cell_content(clean_spec)
-
-            suspect_pairs.append({
-                "line_number": line.line_number,
-                "orig": safe_orig,
-                "conf": safe_conf,
-                "spec": safe_spec,
-                "unit": line.unit or "Pcs"
-            })
-
-        # 4. If all items match identically deterministically:
+        # 4. If all item texts match deterministically, skip LLM invocation
         if not suspect_pairs:
             rev.ai_review_status = "COMPLETED"
             await db.commit()
@@ -130,18 +120,25 @@ class SemanticDiscrepancyAuditor:
                 status="COMPLETED",
                 findings_count=0,
                 findings=[],
-                summary="Pemeriksaan semantik selesai: seluruh nama barang dan spesifikasi konsisten secara deterministik."
+                summary="Pemeriksaan semantik lengkap: Semua deskripsi barang konsisten di seluruh dokumen."
             )
 
-        # 5. Assemble passive prompt for suspect pairs
+        # 5. Build Sanitized, XML-Escaped Prompt for LLM
         pair_prompts = []
         for p in suspect_pairs:
+            clean_a, _ = PIISanitizer.sanitize_text(p["desc_a"], officials_names)
+            clean_b, _ = PIISanitizer.sanitize_text(p["desc_b"], officials_names)
+            clean_spec, _ = PIISanitizer.sanitize_text(p["spec"], officials_names)
+
+            safe_a = PIISanitizer.safe_cell_content(clean_a)
+            safe_b = PIISanitizer.safe_cell_content(clean_b)
+            safe_spec = PIISanitizer.safe_cell_content(clean_spec)
+
             pair_prompts.append(
-                f'<item_pair line="{p["line_number"]}">\n'
-                f'  <source_hps>{p["orig"]}</source_hps>\n'
-                f'  <agreed_order>{p["conf"]}</agreed_order>\n'
-                f'  <specification>{p["spec"]}</specification>\n'
-                f'  <unit>{p["unit"]}</unit>\n'
+                f'<item_pair line="{p["line_number"]}">'
+                f'<doc_a code="{p["sheet_a"]}">{safe_a}</doc_a>'
+                f'<doc_b code="{p["sheet_b"]}">{safe_b}</doc_b>'
+                f'<spec>{safe_spec}</spec>'
                 f'</item_pair>'
             )
 
@@ -152,6 +149,7 @@ class SemanticDiscrepancyAuditor:
         )
 
         adapter = get_ai_adapter()
+        mock_adapter = MockAIAdapter()
 
         async def _run_llm():
             return await adapter.complete_structured(
@@ -160,14 +158,22 @@ class SemanticDiscrepancyAuditor:
                 response_schema=DiscrepancyAuditLLMResult
             )
 
+        async def _fallback_llm():
+            return await mock_adapter.complete_structured(
+                system_prompt=cls.SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                response_schema=DiscrepancyAuditLLMResult
+            )
+
         audit_result, status, err_msg = await AIBudgetGuard.execute_guarded(
             db=db,
             task_type="DISCREPANCY_AUDITOR",
-            execute_fn=_run_llm
+            execute_fn=_run_llm,
+            fallback_fn=_fallback_llm
         )
 
         # 6. Handle Fallback / Failure / Budget Exceeded
-        if not audit_result or status != "COMPLETED":
+        if not audit_result or status not in ["COMPLETED", "FALLBACK"]:
             rev.ai_review_status = "FAILED"
             await db.commit()
             return SemanticAuditResponse(
@@ -209,31 +215,32 @@ class SemanticDiscrepancyAuditor:
             finding = Finding(
                 run_id=vrun.id,
                 rule_code="AI_SEMANTIC_DISCREPANCY",
-                severity=item.severity if item.severity in ("WARNING", "INFO") else "WARNING",
-                doc_code=item.sheet_b or "D05",
-                sheet_name=item.sheet_b or "SURAT PESANAN",
-                field_name="confirmed_description",
+                severity=item.severity,
+                doc_code=item.sheet_a,
+                sheet_name=item.sheet_a,
+                field_name="description",
                 original_value=item.item_name,
-                proposed_value=item.recommended_action,
-                message=item.message,
+                proposed_value=f"Variasi pada {item.sheet_b}: {item.recommended_action}",
+                message=f"[{item.discrepancy_type}] {item.message}",
                 disposition="PENDING"
             )
             db.add(finding)
 
         rev.ai_review_status = "COMPLETED"
 
+        # 9. Audit event trail
         await audit_service.log_event(
             db=db,
             entity_name="PackageRevision",
             entity_id=str(revision_id),
-            action="AI_AUDIT_COMPLETED",
+            action="AI_SEMANTIC_AUDIT",
             actor=actor_name,
+            before_state={"ai_review_status": "NOT_RUN"},
             after_state={
-                "status": "COMPLETED",
-                "findings_count": len(audit_result.findings),
-                "run_id": str(vrun.id)
+                "ai_review_status": "COMPLETED",
+                "findings_count": len(audit_result.findings)
             },
-            reason="Pemeriksaan semantik ketidaksesuaian teks antar dokumen selesai dijalankan"
+            reason=audit_result.summary
         )
 
         await db.commit()

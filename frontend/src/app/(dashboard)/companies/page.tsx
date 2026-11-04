@@ -26,7 +26,7 @@ export default function CompaniesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<any | null>(null);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
 
   const { data: companies = [], isLoading, error, refetch } = useQuery<any[]>({
     queryKey: ["companies"],
@@ -77,7 +77,7 @@ export default function CompaniesPage() {
           <button
             type="button"
             onClick={handleOpenCreate}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-primary hover:opacity-90 text-white transition shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Tambah Rekanan Baru</span>
@@ -126,7 +126,7 @@ export default function CompaniesPage() {
             <button
               type="button"
               onClick={handleOpenCreate}
-              className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-semibold transition shadow-xs text-xs"
+              className="px-3 py-1.5 rounded bg-primary hover:opacity-90 text-white font-sans font-semibold transition shadow-xs text-xs"
             >
               + Daftarkan Rekanan Baru
             </button>
@@ -137,18 +137,18 @@ export default function CompaniesPage() {
               const fullLogoUrl = cp.logo_path
                 ? cp.logo_path.startsWith("http")
                   ? cp.logo_path
-                  : `${apiBase}${cp.logo_path}`
+                  : `${apiBase}/${cp.logo_path.replace(/^\/+/, "")}`
                 : null;
 
               return (
                 <div
                   key={cp.id}
-                  className="border border-border rounded-lg bg-card p-4 space-y-3 shadow-xs hover:border-emerald-500/40 transition flex flex-col justify-between"
+                  className="border border-border rounded-lg bg-card p-4 space-y-3 shadow-xs hover:border-primary/50 transition flex flex-col justify-between"
                 >
                   <div className="space-y-3">
                     {/* Optional Banner Kop Preview */}
                     {fullLogoUrl && (
-                      <div className="relative border border-border/70 rounded bg-white/5 p-1 flex items-center justify-center max-h-16 overflow-hidden">
+                      <div className="relative border border-border/70 rounded bg-white dark:bg-card p-2 flex items-center justify-center max-h-16 overflow-hidden shadow-2xs">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={fullLogoUrl}

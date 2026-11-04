@@ -4,8 +4,10 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from app.api.deps import get_current_actor_name, get_current_user_role
 from app.config import settings
 from app.database import get_db
 from app.models.imports import ImportRecord
@@ -19,14 +21,35 @@ router = APIRouter(prefix="/imports", tags=["Imports"])
 import_service = ExcelImportService()
 
 
+@router.get("/template")
+async def download_import_template():
+    """Downloads a clean, standardized Excel (.xlsx) template compatible with FR02 import."""
+    workbook_bytes = import_service.generate_template_workbook()
+    return Response(
+        content=workbook_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="Format_Impor_Pengadaan_SPJ_PCI.xlsx"'
+        },
+    )
+
+
 @router.post("/upload", response_model=ImportUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_excel_import(
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Uploads an .xlsx workbook, securely parses structural content,
     and stores candidate JSON with detected discrepancies.
     """
+    if role not in ("ADMINISTRATION", "SYSTEM_ADMINISTRATOR"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Akses ditolak: Hanya staf Administrasi atau Administrator Sistem yang dapat mengimpor spreadsheet.",
+        )
+
     if not file.filename.endswith(".xlsx"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -55,6 +78,7 @@ async def upload_excel_import(
         original_filename=file.filename,
         file_hash=file_hash,
         file_size=file_size,
+        uploader=actor_name,
         status="PARSED",
         candidate_payload=parsed_result,
         sheet_metadata={"sheet_names": parsed_result["sheet_names"]},
@@ -101,11 +125,18 @@ async def get_import_preview(id: UUID, db: AsyncSession = Depends(get_db)):
 async def confirm_import_and_create_package(
     id: UUID,
     request: ImportConfirmRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
 ):
     """Commits confirmed candidate data into a new package and Revision 1.
     Snapshots master data immutably and recalculates exact financial totals.
     """
+    if role not in ("ADMINISTRATION", "SYSTEM_ADMINISTRATOR"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Akses ditolak: Hanya staf Administrasi atau Administrator Sistem yang dapat mengonfirmasi impor.",
+        )
+
     result = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
     rec = result.scalar_one_or_none()
     if not rec or not rec.candidate_payload:
@@ -295,9 +326,31 @@ async def confirm_import_and_create_package(
 
     for idx, l in enumerate(lines_data, start=1):
         qty = Decimal(str(l.get("quantity", 1)))
-        hps_price = Decimal(str(l.get("hps_unit_price", 0)))
-        offer_price = Decimal(str(l.get("offer_unit_price", 0)))
-        final_price = Decimal(str(l.get("final_unit_price", 0)))
+        hps_raw = (
+            l.get("hps_unit_price")
+            if l.get("hps_unit_price") is not None
+            else (l.get("hps_price") if l.get("hps_price") is not None else l.get("hps-unit-price"))
+        )
+        hps_price = Decimal(str(hps_raw or 0))
+
+        offer_raw = (
+            l.get("offer_unit_price")
+            if l.get("offer_unit_price") is not None
+            else (l.get("offer_price") if l.get("offer_price") is not None else l.get("offer-unit-price"))
+        )
+        offer_price = Decimal(str(offer_raw)) if offer_raw is not None else hps_price
+
+        final_raw = (
+            l.get("final_unit_price")
+            if l.get("final_unit_price") is not None
+            else (l.get("final_price") if l.get("final_price") is not None else l.get("final-unit-price"))
+        )
+        final_price = Decimal(str(final_raw)) if final_raw is not None else offer_price
+
+        if final_price == 0 and hps_price > 0:
+            final_price = hps_price
+        if offer_price == 0 and hps_price > 0:
+            offer_price = hps_price
         discount = Decimal(str(l.get("discount", 0)))
         line_tot = (qty * final_price) - discount
 

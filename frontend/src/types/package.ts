@@ -14,7 +14,9 @@ export type AIReviewStatus =
   | "WARNINGS_DETECTED"
   | "MANUAL_REVIEW_RECORDED"
   | "FAILED"
-  | "COMPLETED";
+  | "COMPLETED"
+  | "BUDGET_EXCEEDED"
+  | (string & {});
 
 export type UserRole =
   | "ADMINISTRATION"

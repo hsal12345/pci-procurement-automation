@@ -4,7 +4,7 @@ import openpyxl
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.ai import CandidateMappingProposal
-from app.services.ai.adapter import get_ai_adapter
+from app.services.ai.adapter import get_ai_adapter, MockAIAdapter
 from app.services.ai.budget_guard import AIBudgetGuard
 from app.services.ai.sanitizer import PIISanitizer
 
@@ -24,8 +24,8 @@ class AIMappingAssistant:
         "- description: item name or description (Nama Barang, Uraian Pekerjaan, etc.)\n"
         "- specification: technical specs or dimensions (Spesifikasi, Ukuran, etc.)\n"
         "- quantity: amount or count (Volume, Vol, Kuantitas, dsb.)\n"
-        "- unit: unit of measure (Satuan, Sat, Unit, dsb.)\n"
-        "- hps_price: owner estimate unit price (Harga HPS, Harga Satuan, dsb.)\n"
+        "- unit: unit of measure such as buah, botol, liter, rim, lembar, pcs (Satuan, Sat, Unit, dsb. - NEVER map 'Harga Satuan' here)\n"
+        "- hps_price: owner estimate unit price (Harga Satuan, Harga HPS, Harga Perkiraan Sendiri, Harga Pagu, dsb.)\n"
         "- offer_price: initial quotation unit price (Harga Penawaran, dsb.)\n"
         "- final_price: negotiated agreed unit price (Harga Negosiasi / Final, dsb.)\n\n"
         "Provide your reasoning and a confidence score between 0.0 and 1.0. "
@@ -78,6 +78,7 @@ class AIMappingAssistant:
         )
 
         adapter = get_ai_adapter()
+        mock_adapter = MockAIAdapter()
 
         async def _run_task():
             return await adapter.complete_structured(
@@ -86,10 +87,18 @@ class AIMappingAssistant:
                 response_schema=CandidateMappingProposal
             )
 
+        async def _fallback_task():
+            return await mock_adapter.complete_structured(
+                system_prompt=cls.SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                response_schema=CandidateMappingProposal
+            )
+
         proposal, status, err_msg = await AIBudgetGuard.execute_guarded(
             db=db,
             task_type="MAPPING_ASSISTANT",
-            execute_fn=_run_task
+            execute_fn=_run_task,
+            fallback_fn=_fallback_task
         )
 
         if proposal:

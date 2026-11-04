@@ -2,14 +2,13 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
 )
 from sqlalchemy.orm import relationship
-from app.models.base import BaseModel, GUID
+from app.models.base import BaseModel, GUID, TZDateTime
 
 
 class GenerationJob(BaseModel):
@@ -19,11 +18,12 @@ class GenerationJob(BaseModel):
     status = Column(String(32), default="QUEUED", nullable=False, index=True)  # QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED
     progress_percent = Column(Integer, default=0, nullable=False)
     error_message = Column(Text, nullable=True)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    completed_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(TZDateTime, nullable=True)
+    completed_at = Column(TZDateTime, nullable=True)
 
     revision = relationship("PackageRevision", back_populates="generation_jobs")
     artifacts = relationship("Artifact", back_populates="job", cascade="all, delete-orphan")
+
 
 
 class Artifact(BaseModel):

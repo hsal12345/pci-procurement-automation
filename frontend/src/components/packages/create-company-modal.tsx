@@ -55,7 +55,7 @@ export function CreateCompanyModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
 
   useEffect(() => {
     if (isOpen) {
@@ -76,7 +76,7 @@ export function CreateCompanyModal({
         if (initialCompany.logo_path) {
           const fullPath = initialCompany.logo_path.startsWith("http")
             ? initialCompany.logo_path
-            : `${apiBase}${initialCompany.logo_path}`;
+            : `${apiBase}/${initialCompany.logo_path.replace(/^\/+/, "")}`;
           setPreviewUrl(fullPath);
         } else {
           setPreviewUrl(null);

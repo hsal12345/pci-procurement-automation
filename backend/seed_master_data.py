@@ -1,13 +1,27 @@
 import asyncio
 from datetime import date
+from pathlib import Path
 from sqlalchemy import select
-from app.database import AsyncSessionLocal
+from app.database import async_engine, AsyncSessionLocal, Base
+import app.models  # noqa: F401
 from app.models.masters import School, OfficialAppointment, Company, CompanyOfficial
+from app.models.users import User
+from app.core.security import hash_password
+
 
 async def seed():
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    backend_dir = Path(__file__).resolve().parent
+    default_school_kop = "/storage/uploads/letterheads/schools/kop_sekolah.png"
+    default_company_kop = "/storage/uploads/letterheads/companies/kop_rekanan.png"
+    has_school_kop = (backend_dir / default_school_kop.lstrip("/")).is_file()
+    has_company_kop = (backend_dir / default_company_kop.lstrip("/")).is_file()
+
     async with AsyncSessionLocal() as session:
         # 1. School 1: SD NEGERI KEBON KOSONG 09
-        sc_kk09 = (await session.execute(select(School).where(School.name.like("%KEBON KOSONG%")))).scalar_one_or_none()
+        sc_kk09 = (await session.execute(select(School).where(School.name.like("%KEBON KOSONG%")))).scalars().first()
         if not sc_kk09:
             sc_kk09 = School(
                 name="SD NEGERI KEBON KOSONG 09",
@@ -16,9 +30,12 @@ async def seed():
                 address="Jl. Dakota V No. 12",
                 subdistrict="Kemayoran",
                 postal_code="10630",
+                letterhead_path=default_school_kop if has_school_kop else None,
             )
             session.add(sc_kk09)
             await session.flush()
+        elif has_school_kop and not sc_kk09.letterhead_path:
+            sc_kk09.letterhead_path = default_school_kop
 
         # Seed officials for KK09
         offs_kk09 = (await session.execute(select(OfficialAppointment).where(OfficialAppointment.school_id == sc_kk09.id))).scalars().all()
@@ -61,7 +78,7 @@ async def seed():
             print("Updated officials SK for SD NEGERI KEBON KOSONG 09")
 
         # 2. School 2: SDN CEMPAKA PUTIH 01 (for testing school switching)
-        sc_cp01 = (await session.execute(select(School).where(School.name.like("%CEMPAKA PUTIH%")))).scalar_one_or_none()
+        sc_cp01 = (await session.execute(select(School).where(School.name.like("%CEMPAKA PUTIH%")))).scalars().first()
         if not sc_cp01:
             sc_cp01 = School(
                 name="SDN CEMPAKA PUTIH BARAT 01",
@@ -105,10 +122,40 @@ async def seed():
             print("Seeded officials for SDN CEMPAKA PUTIH BARAT 01")
 
         # 3. Company 1: CV. PUSTAKA CEMERLANG INDONESIA
-        cp_pci = (await session.execute(select(Company).where(Company.legal_name.like("%PUSTAKA CEMERLANG%")))).scalar_one_or_none()
-        if cp_pci:
+        cp_pci = (await session.execute(select(Company).where(Company.legal_name.like("%PUSTAKA CEMERLANG%")))).scalars().first()
+        if not cp_pci:
+            cp_pci = Company(
+                legal_name="CV. PUSTAKA CEMERLANG INDONESIA",
+                npwp="02.456.789.0-034.000",
+                address="Wisma Mitra Sunter Unit 3-03, Jl. Yos Sudarso Kav. 89",
+                subdistrict="Sunter Jaya",
+                city="Jakarta Utara",
+                postal_code="14350",
+                email="pustakacemerlang@gmail.com",
+                phone="021-65301234",
+                bank_name="Bank DKI",
+                bank_account_number="10121008899",
+                bank_account_holder="CV. Pustaka Cemerlang Indonesia",
+                director_name="Bambang Solifian",
+                director_title="Direktur",
+                director_sk_number="Akta Notaris No. 12 Th 2020",
+                logo_path=default_company_kop if has_company_kop else None,
+            )
+            session.add(cp_pci)
+            await session.flush()
+            session.add(CompanyOfficial(
+                company_id=cp_pci.id,
+                person_name="Bambang Solifian",
+                role="DIREKTUR",
+                role_title="Direktur",
+                position_sk_number="Akta Notaris No. 12 Th 2020",
+            ))
+            print("Seeded CV. PUSTAKA CEMERLANG INDONESIA")
+        else:
             cp_pci.director_sk_number = "Akta Notaris No. 12 Th 2020"
-            cp_off = (await session.execute(select(CompanyOfficial).where(CompanyOfficial.company_id == cp_pci.id))).scalar_one_or_none()
+            if has_company_kop and not cp_pci.logo_path:
+                cp_pci.logo_path = default_company_kop
+            cp_off = (await session.execute(select(CompanyOfficial).where(CompanyOfficial.company_id == cp_pci.id))).scalars().first()
             if not cp_off:
                 session.add(CompanyOfficial(
                     company_id=cp_pci.id,
@@ -122,7 +169,7 @@ async def seed():
             print("Updated CV. PUSTAKA CEMERLANG INDONESIA")
 
         # 4. Company 2: PT. SARANA EDUKASI NUSANTARA (for testing company switching)
-        cp_sen = (await session.execute(select(Company).where(Company.legal_name.like("%SARANA EDUKASI%")))).scalar_one_or_none()
+        cp_sen = (await session.execute(select(Company).where(Company.legal_name.like("%SARANA EDUKASI%")))).scalars().first()
         if not cp_sen:
             cp_sen = Company(
                 legal_name="PT. SARANA EDUKASI NUSANTARA",
@@ -147,8 +194,60 @@ async def seed():
             ))
             print("Seeded PT. SARANA EDUKASI NUSANTARA")
 
+        # 5. Default RBAC User Accounts
+        default_users = [
+            {
+                "username": "sysadmin",
+                "email": "sysadmin@pci.co.id",
+                "full_name": "Administrator Sistem",
+                "role": "SYSTEM_ADMINISTRATOR",
+                "password": "Admin123!",
+            },
+            {
+                "username": "admin",
+                "email": "administrasi@pci.co.id",
+                "full_name": "Staf Administrasi Pengadaan",
+                "role": "ADMINISTRATION",
+                "password": "Admin123!",
+            },
+            {
+                "username": "direktur",
+                "email": "direktur@pci.co.id",
+                "full_name": "Bambang Solifian",
+                "role": "FINANCE_DIRECTOR",
+                "password": "Admin123!",
+            },
+            {
+                "username": "logistik",
+                "email": "logistik@pci.co.id",
+                "full_name": "Petugas Logistik & Pengiriman",
+                "role": "LOGISTICS",
+                "password": "Admin123!",
+            },
+        ]
+
+        for u_data in default_users:
+            existing_u = (
+                await session.execute(select(User).where(User.username == u_data["username"]))
+            ).scalars().first()
+            if not existing_u:
+                session.add(
+                    User(
+                        username=u_data["username"],
+                        email=u_data["email"],
+                        full_name=u_data["full_name"],
+                        password_hash=hash_password(u_data["password"]),
+                        role=u_data["role"],
+                        is_active=True,
+                    )
+                )
+                print(f"Seeded default user: {u_data['username']} ({u_data['role']})")
+
         await session.commit()
         print("Database seeding completed successfully.")
 
+
 if __name__ == "__main__":
     asyncio.run(seed())
+
+

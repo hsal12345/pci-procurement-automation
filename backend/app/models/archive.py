@@ -1,14 +1,13 @@
 from datetime import datetime
 from sqlalchemy import (
     Column,
-    DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
 )
 from sqlalchemy.orm import relationship
-from app.models.base import BaseModel, GUID
+from app.models.base import BaseModel, GUID, TZDateTime
 
 
 class ArchiveRecord(BaseModel):
@@ -22,8 +21,9 @@ class ArchiveRecord(BaseModel):
     status = Column(String(32), default="PENDING", nullable=False, index=True)  # PENDING, SYNCING, SYNCED, FAILED
     attempt_count = Column(Integer, default=0, nullable=False)
     last_error = Column(Text, nullable=True)
-    last_attempt_at = Column(DateTime(timezone=True), nullable=True)
-    synced_at = Column(DateTime(timezone=True), nullable=True)
+    last_attempt_at = Column(TZDateTime, nullable=True)
+    synced_at = Column(TZDateTime, nullable=True)
 
     package = relationship("Package", back_populates="archives")
     revision = relationship("PackageRevision", back_populates="archives")
+

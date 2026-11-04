@@ -5,12 +5,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from app.config import settings
 from app.api.v1 import api_v1_router
-from app.database import AsyncSessionLocal
+from app.database import async_engine, AsyncSessionLocal, Base
+import app.models  # noqa: F401
 from app.models.masters import TaxPolicyVersion
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     async with AsyncSessionLocal() as session:
         res = await session.execute(select(TaxPolicyVersion))
         if not res.scalars().first():
