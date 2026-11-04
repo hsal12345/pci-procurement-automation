@@ -1,0 +1,447 @@
+# ==============================================================================
+# PCI PROCUREMENT & SPJ AUTOMATION SYSTEM — COMPLETE KUBERNETES MANIFEST
+# CV PUSTAKA CEMERLANG INDONESIA
+# ==============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pci-procurement
+  labels:
+    app.kubernetes.io/name: pci-procurement
+    app.kubernetes.io/part-of: pci-spjed
+---
+# ------------------------------------------------------------------------------
+# 1. DATABASE COMPONENT (POSTGRESQL 16)
+# ------------------------------------------------------------------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pci-postgres-secret
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: pci-procurement
+type: Opaque
+stringData:
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgrespassword2026!
+  POSTGRES_DB: pci_spjed
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pci-postgres-pvc
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pci-postgres
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/component: database
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: pci-postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pci-postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: pci-postgres-secret
+                  key: POSTGRES_DB
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+                - -d
+                - pci_spjed
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+                - -d
+                - pci_spjed
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: pci-postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pci-postgres-service
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app.kubernetes.io/name: postgres
+---
+# ------------------------------------------------------------------------------
+# 2. DOCKER APP MANIFEST (BACKEND FASTAPI APPLICATION)
+# ------------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pci-docker-app-config
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: docker-app
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: pci-procurement
+data:
+  APP_NAME: "PCI Procurement & SPJ System"
+  APP_ENV: "production"
+  DEBUG: "false"
+  DATABASE_URL: "postgresql+psycopg2://postgres:postgrespassword2026!@pci-postgres-service:5432/pci_spjed"
+  ASYNC_DATABASE_URL: "postgresql+asyncpg://postgres:postgrespassword2026!@pci-postgres-service:5432/pci_spjed"
+  USE_SQLITE_FALLBACK: "false"
+  LIBREOFFICE_PATH: "/usr/bin/soffice"
+  AI_ENABLED: "true"
+  AI_PROVIDER: "mock"
+  AI_MODEL: "google/gemini-2.0-flash-exp:free"
+  AI_MONTHLY_BUDGET_USD: "10.0"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pci-docker-app-secret
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: docker-app
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: pci-procurement
+type: Opaque
+stringData:
+  SECRET_KEY: "pci-procurement-k8s-production-secret-key-2026"
+  AI_API_KEY: ""
+  AI_BASE_URL: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pci-docker-app-storage-pvc
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: docker-app
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pci-docker-app
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: docker-app
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docker-app
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docker-app
+        app.kubernetes.io/component: backend
+    spec:
+      containers:
+        - name: backend-api
+          image: pci-procurement-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-api
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: pci-docker-app-config
+            - secretRef:
+                name: pci-docker-app-secret
+          volumeMounts:
+            - name: backend-storage
+              mountPath: /app/storage
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+      volumes:
+        - name: backend-storage
+          persistentVolumeClaim:
+            claimName: pci-docker-app-storage-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pci-docker-app-service
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: docker-app
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http-api
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: docker-app
+    app.kubernetes.io/component: backend
+---
+# ------------------------------------------------------------------------------
+# 3. WEB APP MANIFEST (FRONTEND NEXT.JS WEB APPLICATION)
+# ------------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pci-web-app-config
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: web-app
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: pci-procurement
+data:
+  NODE_ENV: "production"
+  BACKEND_INTERNAL_URL: "http://pci-docker-app-service:8000"
+  NEXT_TELEMETRY_DISABLED: "1"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pci-web-app
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: web-app
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web-app
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web-app
+        app.kubernetes.io/component: frontend
+    spec:
+      containers:
+        - name: frontend-nextjs
+          image: pci-procurement-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-web
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: pci-web-app-config
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pci-web-app-service
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: web-app
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http-web
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: web-app
+    app.kubernetes.io/component: frontend
+---
+# ------------------------------------------------------------------------------
+# 4. INGRESS CONTROLLER ROUTING
+# ------------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pci-ingress
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: pci-ingress
+    app.kubernetes.io/part-of: pci-procurement
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
+spec:
+  rules:
+    - host: pci-procurement.local
+      http:
+        paths:
+          - path: /storage
+            pathType: Prefix
+            backend:
+              service:
+                name: pci-docker-app-service
+                port:
+                  number: 8000
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: pci-docker-app-service
+                port:
+                  number: 8000
+          - path: /docs
+            pathType: Exact
+            backend:
+              service:
+                name: pci-docker-app-service
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: pci-docker-app-service
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pci-web-app-service
+                port:
+                  number: 3000
+

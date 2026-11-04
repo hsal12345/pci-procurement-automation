@@ -21,13 +21,14 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "PCI Procurement & SPJ System | CV Pustaka Cemerlang Indonesia",
   description: "Sistem Otomasi Pengadaan Barang/Jasa & Dokumen SPJ Resmi CV Pustaka Cemerlang Indonesia",
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: [
       { url: "/images/pci-icon.png", sizes: "32x32", type: "image/png" },
-      { url: "/images/pci-icon.png", sizes: "192x192", type: "image/png" },
+      { url: "/images/icon-192.png", sizes: "192x192", type: "image/png" },
     ],
     shortcut: "/favicon.ico",
-    apple: "/images/pci-icon.png",
+    apple: "/images/icon-192.png",
   },
 };
 

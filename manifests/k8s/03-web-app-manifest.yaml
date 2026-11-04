@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pci-web-app-config
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: web-app
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: pci-procurement
+data:
+  NODE_ENV: "production"
+  BACKEND_INTERNAL_URL: "http://pci-docker-app-service:8000"
+  NEXT_TELEMETRY_DISABLED: "1"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pci-web-app
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: web-app
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web-app
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web-app
+        app.kubernetes.io/component: frontend
+    spec:
+      containers:
+        - name: frontend-nextjs
+          image: pci-procurement-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-web
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: pci-web-app-config
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pci-web-app-service
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: web-app
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http-web
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: web-app
+    app.kubernetes.io/component: frontend
+

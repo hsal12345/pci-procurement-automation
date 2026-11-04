@@ -1,0 +1,59 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pci-ingress
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: pci-ingress
+    app.kubernetes.io/part-of: pci-procurement
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
+spec:
+  rules:
+    - host: pci-procurement.local
+      http:
+        paths:
+          # Route static uploads and generated documents to Backend Docker App
+          - path: /storage
+            pathType: Prefix
+            backend:
+              service:
+                name: pci-docker-app-service
+                port:
+                  number: 8000
+          # Route API endpoints to Backend Docker App
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: pci-docker-app-service
+                port:
+                  number: 8000
+          # Route Swagger API Documentation to Backend Docker App
+          - path: /docs
+            pathType: Exact
+            backend:
+              service:
+                name: pci-docker-app-service
+                port:
+                  number: 8000
+          # Route Backend Health check
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: pci-docker-app-service
+                port:
+                  number: 8000
+          # Route all UI & Web application traffic to Frontend Web App
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pci-web-app-service
+                port:
+                  number: 3000
+
