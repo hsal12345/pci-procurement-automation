@@ -22,13 +22,17 @@ from app.schemas.ai import (
     AITestConnectionResponse,
     AIUsageLogItem,
     AIPlaygroundTestRequest,
-    AIPlaygroundTestResponse
+    AIPlaygroundTestResponse,
+    SystemKnowledgeChatRequest,
+    SystemKnowledgeChatResponse,
+    SystemKnowledgeInfoResponse
 )
 from app.schemas.common import UserRoleEnum
 from app.services.ai.mapping_assistant import AIMappingAssistant
 from app.services.ai.discrepancy_auditor import SemanticDiscrepancyAuditor
 from app.services.ai.budget_guard import AIBudgetGuard
 from app.services.ai.runtime_manager import runtime_manager
+from app.services.ai.system_knowledge_service import system_knowledge_service
 from app.services.audit_service import audit_service
 
 router = APIRouter(prefix="/ai", tags=["AI Assistance & Semantic Verification"])
@@ -477,3 +481,34 @@ async def record_manual_review(
         recorded_by=actor_name,
         message="Verifikasi manual telah dicatat. Paket sekarang diizinkan untuk diajukan ke tahap Under Review."
     )
+
+
+# =========================================================================
+# System Knowledge Base & Navigation Assistant Endpoints (PRD FR05)
+# =========================================================================
+
+@router.get("/knowledge", response_model=SystemKnowledgeInfoResponse)
+async def get_system_knowledge():
+    """Retrieves metadata and full markdown text of the system knowledge base
+    used by the AI assistant for contextual guidance.
+    """
+    return system_knowledge_service.get_info()
+
+
+@router.post("/knowledge/chat", response_model=SystemKnowledgeChatResponse)
+async def chat_with_system_knowledge(
+    payload: SystemKnowledgeChatRequest,
+    db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_or_finance)
+):
+    """Processes a navigation guide or system question against the system knowledge context,
+    enforcing strict boundaries and tracking token telemetry.
+    """
+    response, status_code, err_msg = await system_knowledge_service.chat(db=db, request=payload)
+    if not response:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=err_msg or "Gagal memproses pesan pada asisten pengetahuan sistem."
+        )
+    return response
+

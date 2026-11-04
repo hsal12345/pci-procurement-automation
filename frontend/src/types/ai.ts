@@ -136,3 +136,43 @@ export interface AIPlaygroundTestResponse {
   output: any;
   summary: string;
 }
+
+export interface SystemKnowledgeRouteItem {
+  title: string;
+  path: string;
+  description?: string;
+}
+
+export interface SystemKnowledgeChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  suggested_routes?: SystemKnowledgeRouteItem[];
+  suggested_questions?: string[];
+  timestamp?: string;
+}
+
+export interface SystemKnowledgeChatRequest {
+  message: string;
+  history?: { role: "user" | "assistant"; content: string }[];
+}
+
+export interface SystemKnowledgeChatResponse {
+  reply: string;
+  suggested_routes: SystemKnowledgeRouteItem[];
+  suggested_questions: string[];
+  runtime_mode: string;
+  provider: string;
+  model: string;
+  tokens_used: number;
+  latency_ms: number;
+}
+
+export interface SystemKnowledgeInfoResponse {
+  title: string;
+  filename: string;
+  last_updated: string;
+  content: string;
+  size_bytes: number;
+  sections: string[];
+}
+

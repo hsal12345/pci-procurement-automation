@@ -261,6 +261,199 @@ class MockAIAdapter(BaseAIAdapter):
                 }
             return response_schema.model_validate(payload), prompt_tokens, completion_tokens, latency_ms
 
+        # Check if requested schema is SystemKnowledgeChatResult
+        if "SystemKnowledgeChatResult" in schema_name:
+            query = user_prompt.lower()
+
+            # 1. Out-of-Scope / Off-Topic Detector
+            off_topic_patterns = ["resep", "masak", "cuaca", "presiden", "politik", "lagu", "puisi", "kalkulator python", "game", "cerita"]
+            if any(p in query for p in off_topic_patterns):
+                reply = (
+                    "**Mohon maaf**, sebagai **Asisten Navigasi & Sistem CV Pustaka Cemerlang Indonesia**, "
+                    "saya **hanya berwenang** menjawab pertanyaan seputar operasional sistem ini, panduan navigasi menu, "
+                    "alur persetujuan dokumen SPJ, aturan bisnis validasi, dan tata kelola pengadaan barang/jasa.\n\n"
+                    "Silakan tanyakan topik terkait sistem seperti:\n"
+                    "- *Bagaimana cara membuat paket pengadaan baru?*\n"
+                    "- *Di mana menu untuk mengimpor berkas Excel?*\n"
+                    "- *Bagaimana alur persetujuan oleh Direktur Keuangan?*\n"
+                    "- *Apa saja fungsi 13 dokumen SPJ (D01-D13)?*"
+                )
+                routes = [
+                    {"title": "Paket Pengadaan", "path": "/packages", "description": "Daftar dan buat transaksi pengadaan SD"},
+                    {"title": "Impor Spreadsheet", "path": "/imports", "description": "Unggah berkas Excel dan petakan kolom"}
+                ]
+                questions = [
+                    "Bagaimana cara membuat paket pengadaan baru?",
+                    "Apa fungsi menu Impor Spreadsheet?",
+                    "Bagaimana alur persetujuan Direktur Keuangan?"
+                ]
+            # 2. Impor Spreadsheet / Upload Excel
+            elif any(w in query for w in ["impor", "import", "excel", "upload", "unggah", "xlsx", "kk09", "pemetaan"]):
+                reply = (
+                    "### 📥 Panduan Impor Berkas Spreadsheet Excel\n\n"
+                    "Untuk mengimpor data transaksi pengadaan dari berkas Excel (seperti format referensi `4 PCI KK09.xlsx`):\n\n"
+                    "1. Buka menu **Impor Spreadsheet** pada bilah sisi kiri (rute: `/imports`).\n"
+                    "2. Klik area unggah berkas atau seret berkas `.xlsx` (maksimal 20 MB).\n"
+                    "3. Sistem akan mengaktifkan **Smart Column Mapping AI** untuk menganalisis baris header tabel secara otomatis.\n"
+                    "4. Periksa pratinjau pemetaan kolom (*No*, *Nama Barang*, *Spesifikasi*, *Volume*, *Satuan*, *Harga Satuan*).\n"
+                    "5. Klik tombol **'Konfirmasi & Buat Paket'** untuk menyimpan draf paket baru.\n\n"
+                    "Paket yang diimpor akan langsung berstatus **DRAFT** dan dapat disunting di Workspace Detail Paket."
+                )
+                routes = [
+                    {"title": "Impor Spreadsheet", "path": "/imports", "description": "Halaman unggah berkas Excel dan pratinjau pemetaan"},
+                    {"title": "Paket Pengadaan", "path": "/packages", "description": "Lihat hasil draf paket yang telah diimpor"}
+                ]
+                questions = [
+                    "Bagaimana cara mengatasi kolom ambigu saat impor?",
+                    "Bagaimana jika berkas memiliki rumus eksternal?",
+                    "Bagaimana cara memverifikasi hasil impor di Detail Paket?"
+                ]
+            # 3. Alur Persetujuan / Direktur Keuangan (Approval Workflow)
+            elif any(w in query for w in ["approve", "persetujuan", "direktur", "review", "kembalikan", "return", "under_review"]):
+                reply = (
+                    "### 🛡️ Alur Persetujuan Dokumen oleh Direktur Keuangan\n\n"
+                    "Hanya pengguna dengan peran **Direktur Keuangan** (`FINANCE_DIRECTOR`) yang memiliki wewenang untuk menyetujui paket:\n\n"
+                    "1. Masuk ke menu **Persetujuan Direktur** (rute: `/packages?filter=under_review`).\n"
+                    "2. Pilih paket yang bertanda status **UNDER_REVIEW**.\n"
+                    "3. Periksa rincian barang, selisih harga penawaran vs negosiasi, dan pratinjau dokumen PDF draf.\n"
+                    "4. **Keputusan Persetujuan**:\n"
+                    "   - **Setujui (Approve)**: Klik tombol hijau untuk mengesahkan revisi dan mengunci snapshot dokumen final (`ISSUED`).\n"
+                    "   - **Kembalikan (Return)**: Jika terdapat kesalahan, klik tombol merah dan wajib masukkan catatan alasan perbaikan tertulis. Status paket akan menjadi `RETURNED` agar diperbaiki oleh Staf Administrasi."
+                )
+                routes = [
+                    {"title": "Persetujuan Direktur", "path": "/packages?filter=under_review", "description": "Daftar paket yang menunggu keputusan Direktur"},
+                    {"title": "Pemeriksaan Sistem", "path": "/packages?tab=inspection", "description": "Periksa hasil audit validasi sistem"}
+                ]
+                questions = [
+                    "Apa syarat agar paket bisa diajukan (Submit) ke Direktur?",
+                    "Bagaimana cara staf administrasi memperbaiki paket yang dikembalikan (RETURNED)?",
+                    "Apakah paket yang sudah disetujui (APPROVED) bisa diubah kembali?"
+                ]
+            # 4. Master Data (Sekolah, Rekanan, Pejabat)
+            elif any(w in query for w in ["sekolah", "sd", "rekanan", "perusahaan", "cv", "pejabat", "npsn", "npwp", "master"]):
+                reply = (
+                    "### 🏛️ Pengelolaan Data Master Sistem\n\n"
+                    "Data master digunakan berulang untuk memastikan konsistensi seluruh 13 dokumen pengadaan:\n\n"
+                    "- **Master Sekolah** (`/schools`):\n"
+                    "  Mengelola identitas SD, NPSN, alamat, nomor kontak, unggahan kop surat, serta pejabat resmi (Kepala Sekolah, Bendahara BOS, Pejabat Pemeriksa Barang).\n"
+                    "- **Master Rekanan** (`/companies`):\n"
+                    "  Mengelola data legalitas CV Pustaka Cemerlang Indonesia (NPWP, NIB, rekening bank operasional, logo/kop surat, identitas Direktur penandatangan).\n\n"
+                    "> **Catatan Keamanan**: Perubahan data sensitif seperti nomor rekening bank penyedia atau kebijakan perpajakan memerlukan otorisasi Direktur Keuangan."
+                )
+                routes = [
+                    {"title": "Master Sekolah", "path": "/schools", "description": "Kelola data SD, NPSN, dan SK pejabat sekolah"},
+                    {"title": "Master Rekanan", "path": "/companies", "description": "Kelola profil CV PCI, rekening bank, dan direktur"}
+                ]
+                questions = [
+                    "Bagaimana cara menambahkan SK Kepala Sekolah baru?",
+                    "Bagaimana cara mengunggah logo atau kop surat sekolah?",
+                    "Mengapa perubahan nomor rekening bank memerlukan otorisasi Direktur?"
+                ]
+            # 5. 13 Dokumen SPJ (D01 s/d D13) & Unduh Berkas
+            elif any(w in query for w in ["dokumen", "13", "spj", "d01", "d05", "bast", "bapb", "faktur", "kwitansi", "zip", "pdf", "word", "unduh", "cetak"]):
+                reply = (
+                    "### 📄 13 Dokumen Wajib SPJ Pengadaan (D01 s/d D13)\n\n"
+                    "Sistem secara otomatis menghasilkan paket lengkap 13 dokumen pengadaan:\n\n"
+                    "1. **D01 — HPS**: Harga Perkiraan Sendiri (estimasi pasar).\n"
+                    "2. **D02 — SPP**: Surat Permintaan Penawaran dari sekolah.\n"
+                    "3. **D03 — Surat Penawaran**: Penawaran harga awal rekanan.\n"
+                    "4. **D04 — Surat Negosiasi**: Berita acara kesepakatan harga final.\n"
+                    "5. **D05 — Surat Pesanan (SPK)**: Surat pesanan resmi dari Kepala Sekolah.\n"
+                    "6. **D06 — Faktur**: Invoice resmi penjualan beserta rincian PPN.\n"
+                    "7. **D07 — Kwitansi**: Tanda bukti pembayaran dengan nominal terbilang otomatis.\n"
+                    "8. **D08 — Surat Jalan**: Bukti fisik pengiriman barang oleh logistik.\n"
+                    "9. **D09 — BAPB**: Berita acara pemeriksaan kondisi fisik barang.\n"
+                    "10. **D10 — BAST**: Berita acara serah terima barang kepada Kepala Sekolah.\n"
+                    "11. **D11 — BAPP**: Berita acara penyelesaian pekerjaan 100%.\n"
+                    "12. **D12 — Lampiran BAPP**: Tabel rincian pekerjaan dan bukti lampiran.\n"
+                    "13. **D13 — BAST Rekanan**: Format serah terima arsip penyedia.\n\n"
+                    "Seluruh berkas dapat diunduh dalam format **XLSX**, **Word (.docx)**, **PDF individual**, **PDF Gabungan**, atau **Arsip Lengkap (ZIP)** melalui **Tab Dokumen** di `/packages/[id]` atau menu **Arsip & Generator** (`/packages?tab=documents`)."
+                )
+                routes = [
+                    {"title": "Arsip & Generator Dokumen", "path": "/packages?tab=documents", "description": "Unduh berkas SPJ yang telah diterbitkan (Issued)"},
+                    {"title": "Paket Pengadaan", "path": "/packages", "description": "Buka workspace paket untuk pratinjau dokumen"}
+                ]
+                questions = [
+                    "Kapan watermark 'DRAFT' pada dokumen akan hilang?",
+                    "Apa perbedaan dokumen BAST (D10) dan BAST Rekanan (D13)?",
+                    "Bagaimana cara mencetak seluruh dokumen dalam satu kali unduh?"
+                ]
+            # 6. Hak Akses / Peran Pengguna (RBAC) & Users
+            elif any(w in query for w in ["role", "peran", "hak akses", "admin", "logistik", "user", "pengguna", "rbac"]):
+                reply = (
+                    "### 👥 Peran Pengguna & Hak Akses Sistem (RBAC)\n\n"
+                    "Sistem membagi wewenang menjadi 4 peran tegas:\n\n"
+                    "1. **Staf Administrasi** (`ADMINISTRATION`):\n"
+                    "   Menyusun draf paket, impor spreadsheet, input barang & harga, menjalankan validasi, mengajukan review. *Dilarang menyetujui paket sendiri.*\n"
+                    "2. **Staf Logistik** (`LOGISTICS`):\n"
+                    "   Menginput nomor surat jalan, tanggal tiba riil, verifikasi kondisi fisik barang, dan unggah foto bukti. *Dilarang mengubah harga atau approve.*\n"
+                    "3. **Direktur Keuangan** (`FINANCE_DIRECTOR`):\n"
+                    "   Meninjau paket yang diajukan, melakukan persetujuan (**Approve**) atau pengembalian (**Return**), otorisasi rekening/pajak, pantau kuota AI.\n"
+                    "4. **Administrator Sistem** (`SYSTEM_ADMINISTRATOR`):\n"
+                    "   Manajemen akun pengguna di `/users`, konfigurasi runtime server & AI, backup basis data."
+                )
+                routes = [
+                    {"title": "Manajemen Pengguna", "path": "/users", "description": "Kelola akun pengguna dan peran staf (Khusus Sysadmin)"},
+                    {"title": "Paket Pengadaan", "path": "/packages", "description": "Buka transaksi pengadaan aktif"}
+                ]
+                questions = [
+                    "Bagaimana cara mengganti peran akun pengguna?",
+                    "Apa yang harus dilakukan staf administrasi jika paket dikembalikan?",
+                    "Mengapa logistik tidak bisa mengubah rincian harga?"
+                ]
+            # 7. AI & Audit Usage
+            elif any(w in query for w in ["runtime", "gemini", "budget", "biaya", "token", "audit", "usage", "telemetri"]):
+                reply = (
+                    "### ⚙️ Tata Kelola AI & Audit Usage (`/ai/usage`)\n\n"
+                    "Menu ini menyediakan kontrol penuh atas kecerdasan buatan dan kepatuhan sistem:\n\n"
+                    "1. **Pengaturan Runtime**: Beralih antara **API Cloud** (Google Gemini, OpenRouter, OpenAI) dan **Local Runtime** (Ollama, Mock Engine). Tersedia opsi batas anggaran bulanan ($ USD) dan Auto-Failover.\n"
+                    "2. **Playground**: Uji coba live deteksi diskrepansi dan pemetaan kolom tabel.\n"
+                    "3. **Log Telemetri AI**: Pantau riwayat konsumsi token, latensi, dan estimasi biaya per pemanggilan.\n"
+                    "4. **Jejak Audit Sistem**: Catatan kepatuhan aktivitas pengguna dan jejak perubahan data.\n"
+                    "5. **System Knowlage Chat**: Pusat tanya jawab asisten cerdas mengenai navigasi dan sistem."
+                )
+                routes = [
+                    {"title": "AI & Audit Usage", "path": "/ai/usage", "description": "Kelola runtime AI, batas biaya, dan telemetri"},
+                    {"title": "Pemeriksaan Sistem", "path": "/packages?tab=inspection", "description": "Lihat hasil audit diskrepansi semantik AI"}
+                ]
+                questions = [
+                    "Bagaimana cara mengaktifkan model Gemini 2.0 Flash?",
+                    "Apa yang terjadi jika anggaran bulanan AI ($ USD) tercapai?",
+                    "Bagaimana cara menguji koneksi API runtime?"
+                ]
+            # 8. Default / Paket Pengadaan / Navigasi Umum
+            else:
+                reply = (
+                    "### 🧭 Selamat Datang di Panduan Sistem PCI Procurement & SPJ\n\n"
+                    "Saya adalah Asisten Cerdas Pengetahuan Sistem yang siap memandu Anda bernavigasi dan memahami seluruh fitur aplikasi pengadaan **CV Pustaka Cemerlang Indonesia**.\n\n"
+                    "**Rute Menu Utama Aplikasi**:\n"
+                    "- **Paket Pengadaan** (`/packages`): Halaman utama transaksi pengadaan barang/jasa SD.\n"
+                    "- **Impor Spreadsheet** (`/imports`): Unggah berkas Excel (`.xlsx`) dan pemetaan cerdas AI.\n"
+                    "- **Pemeriksaan Sistem** (`/packages?tab=inspection`): Cek kepatuhan aturan bisnis (BR01-BR15).\n"
+                    "- **Persetujuan Direktur** (`/packages?filter=under_review`): Ruang kerja persetujuan Direktur Keuangan.\n"
+                    "- **Master Sekolah** (`/schools`) & **Master Rekanan** (`/companies`): Basis data identitas dan SK pejabat.\n"
+                    "- **AI & Audit Usage** (`/ai/usage`): Tata kelola runtime AI, anggaran token, dan jejak audit.\n\n"
+                    "Ketik pertanyaan Anda atau pilih pertanyaan yang disarankan di bawah untuk memulai panduan langkah demi langkah!"
+                )
+                routes = [
+                    {"title": "Paket Pengadaan", "path": "/packages", "description": "Daftar transaksi dan buat paket pengadaan baru"},
+                    {"title": "Impor Spreadsheet", "path": "/imports", "description": "Unggah berkas Excel transaksi"},
+                    {"title": "Master Sekolah", "path": "/schools", "description": "Kelola data SD dan SK pejabat"}
+                ]
+                questions = [
+                    "Bagaimana langkah demi langkah membuat paket pengadaan baru?",
+                    "Bagaimana cara mengimpor berkas Excel transaksi?",
+                    "Apa fungsi 13 dokumen SPJ dari D01 sampai D13?",
+                    "Bagaimana alur persetujuan oleh Direktur Keuangan?"
+                ]
+
+            payload = {
+                "reply": reply,
+                "suggested_routes": routes,
+                "suggested_questions": questions
+            }
+            return response_schema.model_validate(payload), prompt_tokens, completion_tokens, latency_ms
+
         # Check if requested schema is PlaygroundDiscrepancyResult
         if "PlaygroundDiscrepancyResult" in schema_name:
             payload = {

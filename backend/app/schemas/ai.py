@@ -163,3 +163,65 @@ class AIPlaygroundTestResponse(BaseModel):
     cost_usd: float
     output: Any
     summary: str
+
+
+# =========================================================================
+# System Knowledge Chat Schemas (PRD FR05 & Navigation Assistant)
+# =========================================================================
+
+class SystemKnowledgeRouteItem(BaseModel):
+    title: str = Field(..., description="Judul menu atau halaman navigasi")
+    path: str = Field(..., description="Path URL internal (misal: /packages, /imports)")
+    description: Optional[str] = Field(None, description="Keterangan singkat fungsi halaman")
+
+
+class SystemKnowledgeChatMessage(BaseModel):
+    role: str = Field(..., description="'user' atau 'assistant'")
+    content: str = Field(..., description="Isi teks pesan")
+
+
+class SystemKnowledgeChatRequest(BaseModel):
+    message: str = Field(..., description="Pertanyaan pengguna terkait sistem atau navigasi")
+    history: Optional[List[SystemKnowledgeChatMessage]] = Field(
+        default_factory=list,
+        description="Riwayat percakapan sebelumnya untuk konteks multi-turn"
+    )
+
+
+class SystemKnowledgeChatResult(BaseModel):
+    """Structured LLM output for system knowledge and navigation chat."""
+    reply: str = Field(
+        ...,
+        description="Jawaban lengkap dan panduan navigasi terstruktur dalam format Markdown berbahasa Indonesia."
+    )
+    suggested_routes: List[SystemKnowledgeRouteItem] = Field(
+        default_factory=list,
+        description="Daftar tautan rute halaman sistem yang relevan untuk dikunjungi pengguna."
+    )
+    suggested_questions: List[str] = Field(
+        default_factory=list,
+        description="2-4 pertanyaan lanjutan yang relevan untuk memperdalam pemahaman pengguna."
+    )
+
+
+class SystemKnowledgeChatResponse(BaseModel):
+    """API Response payload delivered to the frontend chat UI."""
+    reply: str
+    suggested_routes: List[SystemKnowledgeRouteItem] = []
+    suggested_questions: List[str] = []
+    runtime_mode: str
+    provider: str
+    model: str
+    tokens_used: int = 0
+    latency_ms: int = 0
+
+
+class SystemKnowledgeInfoResponse(BaseModel):
+    """Metadata and raw text content of the system knowledge base markdown file."""
+    title: str
+    filename: str
+    last_updated: str
+    content: str
+    size_bytes: int
+    sections: List[str] = []
+

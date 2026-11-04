@@ -36,11 +36,13 @@ import {
   ArrowRight,
   ShieldCheck,
   HelpCircle,
+  Bot,
 } from "lucide-react";
+import { SystemKnowledgeChatTab } from "./system-knowledge-chat";
 
 export default function AIUsageDashboard() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<"runtime" | "playground" | "logs" | "audit">("runtime");
+  const [activeTab, setActiveTab] = useState<"runtime" | "playground" | "logs" | "audit" | "knowledge_chat">("runtime");
 
   // Telemetry logs filters
   const [logStatusFilter, setLogStatusFilter] = useState<string>("ALL");
@@ -516,6 +518,22 @@ export default function AIUsageDashboard() {
         >
           <FileCheck2 className="w-4 h-4" />
           <span>Jejak Audit Sistem</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("knowledge_chat")}
+          className={`flex items-center gap-2 px-4 py-2.5 font-medium border-b-2 -mb-px text-xs transition ${
+            activeTab === "knowledge_chat"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+          }`}
+        >
+          <Bot className="w-4 h-4" />
+          <span>System Knowlage Chat</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-primary/10 text-primary font-mono font-bold">
+            Baru
+          </span>
         </button>
       </div>
 
@@ -1287,6 +1305,11 @@ export default function AIUsageDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* TAB 5: SYSTEM KNOWLEDGE CHAT (NAVIGATION & SYSTEM ASSISTANT) */}
+      {activeTab === "knowledge_chat" && (
+        <SystemKnowledgeChatTab runtimeConfig={config} />
       )}
     </div>
   );

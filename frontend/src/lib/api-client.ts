@@ -2,7 +2,21 @@ import { UserRole, PackageItem, PackageRevision, RevisionLine } from "@/types/pa
 import { ValidationRun } from "@/types/validation";
 import { LogisticsRecord, EvidenceAttachment } from "@/types/logistics";
 import { Artifact, GenerationJob } from "@/types/documents";
-import { SemanticAuditResponse, AIUsageResponse, CandidateMappingProposal, AIRuntimeConfig, AIRuntimeConfigUpdate, AITestConnectionRequest, AITestConnectionResponse, AIUsageLogItem, AIPlaygroundTestRequest, AIPlaygroundTestResponse } from "@/types/ai";
+import {
+  SemanticAuditResponse,
+  AIUsageResponse,
+  CandidateMappingProposal,
+  AIRuntimeConfig,
+  AIRuntimeConfigUpdate,
+  AITestConnectionRequest,
+  AITestConnectionResponse,
+  AIUsageLogItem,
+  AIPlaygroundTestRequest,
+  AIPlaygroundTestResponse,
+  SystemKnowledgeInfoResponse,
+  SystemKnowledgeChatRequest,
+  SystemKnowledgeChatResponse,
+} from "@/types/ai";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -368,6 +382,15 @@ export const apiClient = {
     request<AIPlaygroundTestResponse>("/api/v1/ai/playground/test", {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+
+  getSystemKnowledgeInfo: () =>
+    request<SystemKnowledgeInfoResponse>("/api/v1/ai/knowledge"),
+
+  sendSystemKnowledgeChat: (payload: SystemKnowledgeChatRequest) =>
+    request<SystemKnowledgeChatResponse>("/api/v1/ai/knowledge/chat", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 
   suggestAIMapping: (importId: string) =>
