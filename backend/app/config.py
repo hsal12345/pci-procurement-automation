@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # AI Assistance & Semantic Verification (Phase 4 / Milestone 5)
     AI_ENABLED: bool = True
-    AI_PROVIDER: str = "mock"  # "mock", "openrouter", "gemini", "openai", "ollama"
+    AI_PROVIDER: str = "mock"  # "mock", "openrouter", "gemini", "openai", "deepseek", "ollama"
     AI_API_KEY: Optional[str] = None
     AI_BASE_URL: Optional[str] = None
     AI_MODEL: str = "google/gemini-2.0-flash-exp:free"
@@ -80,6 +80,8 @@ class Settings(BaseSettings):
             return "https://openrouter.ai/api/v1"
         elif provider == "gemini":
             return "https://generativelanguage.googleapis.com/v1beta/openai"
+        elif provider == "deepseek":
+            return "https://api.deepseek.com/v1"
         elif provider == "ollama":
             return "http://localhost:11434/v1"
         return "https://api.openai.com/v1"

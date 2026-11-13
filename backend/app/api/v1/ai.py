@@ -69,6 +69,10 @@ RECOMMENDED_MODELS: Dict[str, List[str]] = {
         "gpt-4o",
         "gpt-3.5-turbo"
     ],
+    "deepseek": [
+        "deepseek-chat",
+        "deepseek-reasoner"
+    ],
     "ollama": [
         "llama3.2",
         "llama3.1",

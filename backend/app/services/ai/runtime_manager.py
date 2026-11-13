@@ -16,7 +16,7 @@ CONFIG_FILE_NAME = "ai_runtime_config.json"
 
 class AIRuntimeConfig(BaseModel):
     runtime_mode: str = Field("local", description="'api' for Cloud/External APIs, 'local' for Local LLM / Deterministic Mock")
-    provider: str = Field("mock", description="gemini, openrouter, openai, ollama, mock, custom")
+    provider: str = Field("mock", description="gemini, openrouter, openai, deepseek, ollama, mock, custom")
     base_url: str = Field("http://localhost:11434/v1", description="Effective base API URL")
     api_key: Optional[str] = Field(None, description="API Key for cloud providers")
     model: str = Field("mock-rule-engine", description="Active model name")
@@ -60,7 +60,7 @@ class AIRuntimeManager:
 
         # Fallback to settings
         provider = (settings.AI_PROVIDER or "mock").lower().strip()
-        runtime_mode = "api" if provider in ["gemini", "openrouter", "openai"] and settings.AI_API_KEY else "local"
+        runtime_mode = "api" if provider in ["gemini", "openrouter", "openai", "deepseek"] and settings.AI_API_KEY else "local"
         if runtime_mode == "local" and provider not in ["ollama", "mock"]:
             provider = "mock"
 
@@ -124,6 +124,8 @@ class AIRuntimeManager:
                 new_data["base_url"] = "https://openrouter.ai/api/v1"
             elif provider == "openai":
                 new_data["base_url"] = "https://api.openai.com/v1"
+            elif provider == "deepseek":
+                new_data["base_url"] = "https://api.deepseek.com/v1"
             elif provider == "ollama":
                 new_data["base_url"] = "http://localhost:11434/v1"
             elif provider == "mock":

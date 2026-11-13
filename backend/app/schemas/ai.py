@@ -86,7 +86,7 @@ class ManualReviewRecordResponse(BaseModel):
 
 class AIRuntimeConfigResponse(BaseModel):
     runtime_mode: str = Field(..., description="'api' or 'local'")
-    provider: str = Field(..., description="gemini, openrouter, openai, ollama, mock, custom")
+    provider: str = Field(..., description="gemini, openrouter, openai, deepseek, ollama, mock, custom")
     base_url: str
     model: str
     has_api_key: bool
