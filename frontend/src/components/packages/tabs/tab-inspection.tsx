@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PackageRevision } from "@/types/package";
 import { Finding, ValidationRun } from "@/types/validation";
-import { SemanticAuditResponse, SemanticDiscrepancyItem } from "@/types/ai";
+import {
+  AIFixApplyResponse,
+  DocumentSemanticScoreItem,
+  SemanticAuditResponse,
+  SemanticDiscrepancyItem,
+} from "@/types/ai";
 import { apiClient } from "@/lib/api-client";
+import { AIFixModal } from "@/components/packages/ai-fix-modal";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -26,12 +32,17 @@ import {
   ArrowRight,
   X,
   FileText,
+  Wand2,
+  SlidersHorizontal,
+  Award,
 } from "lucide-react";
 
 interface TabInspectionProps {
   revision: PackageRevision;
   validationRun?: ValidationRun | null;
+  isReadOnly?: boolean;
   onRefresh: () => Promise<void>;
+  onClearDirty?: () => void;
   onNavigateToField: (tabKey: string, fieldId?: string) => void;
 }
 
@@ -41,20 +52,60 @@ interface NotificationState {
   message: string;
 }
 
+const PASSING_GRADE_STORAGE_KEY = "pci_ai_semantic_passing_grade";
+
 export function TabInspection({
   revision,
   validationRun,
+  isReadOnly = false,
   onRefresh,
+  onClearDirty,
   onNavigateToField,
 }: TabInspectionProps) {
   const [activeSubTab, setActiveSubTab] = useState<"compliance" | "ai_audit">("compliance");
   const [isValidating, setIsValidating] = useState(false);
   const [isAuditingAI, setIsAuditingAI] = useState(false);
   const [aiAuditResult, setAiAuditResult] = useState<SemanticAuditResponse | null>(null);
+  const [passingGrade, setPassingGrade] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(PASSING_GRADE_STORAGE_KEY);
+      if (saved !== null) {
+        const parsed = parseFloat(saved);
+        if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+          return parsed;
+        }
+      }
+    }
+    return 95;
+  });
+  const [isSavingPassingGrade, setIsSavingPassingGrade] = useState(false);
   const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({});
   const [isRecordingManual, setIsRecordingManual] = useState(false);
   const [manualReviewNotes, setManualReviewNotes] = useState("");
+  const [isAutoFixOpen, setIsAutoFixOpen] = useState(false);
   const [notification, setNotification] = useState<NotificationState | null>(null);
+
+  // Load latest persisted AI semantic audit report when revision changes
+  useEffect(() => {
+    let active = true;
+    async function loadLatestAudit() {
+      try {
+        const latest = await apiClient.getLatestAIAudit(revision.id);
+        if (active && latest) {
+          setAiAuditResult(latest);
+          if (typeof latest.passing_grade === "number") {
+            setPassingGrade(latest.passing_grade);
+          }
+        }
+      } catch {
+        // Ignore if none exists yet
+      }
+    }
+    loadLatestAudit();
+    return () => {
+      active = false;
+    };
+  }, [revision.id]);
 
   const allFindings = validationRun?.findings || [];
   const deterministicFindings = allFindings.filter((f) => f.rule_code !== "AI_SEMANTIC_DISCREPANCY");
@@ -69,6 +120,42 @@ export function TabInspection({
 
   const toggleReasoning = (id: string) => {
     setExpandedReasoning((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handlePassingGradeChange = async (rawValue: number, persistToServer = false) => {
+    const clamped = Math.round(Math.max(0, Math.min(100, rawValue)) * 10) / 10;
+    setPassingGrade(clamped);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(PASSING_GRADE_STORAGE_KEY, String(clamped));
+    }
+
+    // Recompute local pass/fail state immediately
+    if (aiAuditResult) {
+      setAiAuditResult((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          passing_grade: clamped,
+          passed: prev.overall_score >= clamped,
+          document_scores: (prev.document_scores || []).map((doc) => ({
+            ...doc,
+            passed: doc.score_percentage >= clamped,
+          })),
+        };
+      });
+
+      if (persistToServer) {
+        setIsSavingPassingGrade(true);
+        try {
+          const updated = await apiClient.updateAIAuditPassingGrade(revision.id, clamped);
+          setAiAuditResult(updated);
+        } catch {
+          // Non-fatal: local state already updated
+        } finally {
+          setIsSavingPassingGrade(false);
+        }
+      }
+    }
   };
 
   const handleRunValidation = async () => {
@@ -97,14 +184,18 @@ export function TabInspection({
     setIsAuditingAI(true);
     setNotification(null);
     try {
-      const resp = await apiClient.auditWithAI(revision.id);
+      const resp = await apiClient.auditWithAI(revision.id, passingGrade);
       setAiAuditResult(resp);
       await onRefresh();
       setActiveSubTab("ai_audit");
+      const scoreText =
+        typeof resp.overall_score === "number"
+          ? ` Skor keseluruhan: ${resp.overall_score.toFixed(1)}% (Passing Grade ${passingGrade.toFixed(1)}% — ${resp.passed ? "LULUS" : "TIDAK LULUS"}).`
+          : "";
       setNotification({
-        type: "success",
+        type: resp.passed ? "success" : "warning",
         title: "Audit Teks Semantik AI Selesai",
-        message: resp.summary || `Pemeriksaan selesai dengan status ${resp.status}. Hasil ditampilkan pada sub-tab Audit AI.`,
+        message: (resp.summary || `Pemeriksaan selesai dengan status ${resp.status}.`) + scoreText,
       });
     } catch (err: any) {
       setNotification({
@@ -148,6 +239,16 @@ export function TabInspection({
     }
   };
 
+  const handleAIFixesApplied = async (result: AIFixApplyResponse) => {
+    onClearDirty?.();
+    await onRefresh();
+    setNotification({
+      type: result.remaining_errors === 0 ? "success" : "info",
+      title: "Perbaikan AI Auto-Fix Diterapkan",
+      message: result.message,
+    });
+  };
+
   // Prepare unified list of AI discrepancy items
   const resolvedAIDiscrepancies: SemanticDiscrepancyItem[] = aiAuditResult
     ? aiAuditResult.findings
@@ -172,6 +273,13 @@ export function TabInspection({
           explanation: cleanMsg,
         };
       });
+
+  const documentScores: DocumentSemanticScoreItem[] = (aiAuditResult?.document_scores || []).map((d) => ({
+    ...d,
+    passed: d.score_percentage >= passingGrade,
+  }));
+  const overallScore = aiAuditResult?.overall_score;
+  const isOverallPassed = typeof overallScore === "number" ? overallScore >= passingGrade : null;
 
   return (
     <div className="p-6 max-w-5xl space-y-6 text-xs font-sans">
@@ -219,24 +327,45 @@ export function TabInspection({
           <Info className="w-6 h-6 text-sky-400" />
         </div>
 
-        {/* AI STATUS */}
+        {/* AI STATUS + SCORE */}
         <div className="border border-border bg-card p-4 rounded-lg flex items-center justify-between shadow-xs">
           <div>
             <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground font-bold block">
               Audit Teks Semantik AI
             </span>
-            <span className="text-xs font-mono font-bold text-foreground block mt-1">
-              {revision.ai_review_status}
-            </span>
+            {typeof overallScore === "number" ? (
+              <div className="flex items-baseline gap-1.5 mt-0.5">
+                <span
+                  className={`text-xl font-mono font-bold tabular-nums ${
+                    isOverallPassed ? "text-emerald-300" : "text-red-300"
+                  }`}
+                >
+                  {overallScore.toFixed(1)}%
+                </span>
+                <span
+                  className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded ${
+                    isOverallPassed
+                      ? "bg-emerald-500/20 text-emerald-300"
+                      : "bg-red-500/20 text-red-300"
+                  }`}
+                >
+                  {isOverallPassed ? "LULUS" : "TIDAK LULUS"}
+                </span>
+              </div>
+            ) : (
+              <span className="text-xs font-mono font-bold text-foreground block mt-1">
+                {revision.ai_review_status}
+              </span>
+            )}
             <span className="text-[10px] text-muted-foreground block mt-0.5">
-              {aiFindingsCount > 0 ? `${aiFindingsCount} Anomali Terdeteksi` : "FR05 & AT16 Kepatuhan"}
+              Passing Grade: {passingGrade.toFixed(0)}% • {aiFindingsCount} Anomali
             </span>
           </div>
           <Sparkles className="w-5 h-5 text-amber-400" />
         </div>
       </div>
 
-      {/* 2. Notification Banner (Replacing Native Browser Alerts) */}
+      {/* 2. Notification Banner */}
       {notification && (
         <div
           className={`p-3.5 rounded-lg border flex items-start justify-between gap-3 animate-in fade-in duration-200 ${
@@ -271,7 +400,7 @@ export function TabInspection({
 
       {/* 3. Action Trigger Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-y border-border py-2.5">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleRunValidation}
@@ -290,6 +419,17 @@ export function TabInspection({
           >
             {isAuditingAI ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> : <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
             <span>Audit Teks AI (Semantik)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAutoFixOpen(true)}
+            disabled={isReadOnly}
+            title={isReadOnly ? "Revisi terkunci dan tidak dapat dimodifikasi" : "Jalankan rekomendasi perbaikan otomatis berbasis AI"}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs transition shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            <span>AI Fix Recommendation</span>
           </button>
         </div>
 
@@ -343,17 +483,19 @@ export function TabInspection({
           <span>Hasil Evaluasi Audit Teks AI (Semantik)</span>
           <span
             className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono tabular-nums ${
-              aiFindingsCount > 0
+              typeof overallScore === "number"
+                ? isOverallPassed
+                  ? "bg-emerald-500/20 text-emerald-300 font-bold"
+                  : "bg-red-500/20 text-red-300 font-bold"
+                : aiFindingsCount > 0
                 ? "bg-amber-500/20 text-amber-300 font-bold"
-                : revision.ai_review_status === "COMPLETED"
-                ? "bg-emerald-500/20 text-emerald-300 font-bold"
                 : "bg-muted text-muted-foreground"
             }`}
           >
-            {aiFindingsCount > 0
+            {typeof overallScore === "number"
+              ? `${overallScore.toFixed(1)}%`
+              : aiFindingsCount > 0
               ? `${aiFindingsCount} Anomali`
-              : revision.ai_review_status === "COMPLETED"
-              ? "Bersih"
               : revision.ai_review_status}
           </span>
         </button>
@@ -389,7 +531,7 @@ export function TabInspection({
                   <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-slate-200">
                     <th className="px-3 py-2.5 w-28">Tingkat</th>
                     <th className="px-3 py-2.5 w-24">Aturan</th>
-                    <th className="px-3 py-2.5 min-w-[200px]">Deskripsi Temuan & Pesan</th>
+                    <th className="px-3 py-2.5 min-w-[200px]">Deskripsi Temuan &amp; Pesan</th>
                     <th className="px-3 py-2.5 w-48">Koordinat Sumber</th>
                     <th className="px-3 py-2.5 w-28 text-center">Aksi</th>
                   </tr>
@@ -406,7 +548,6 @@ export function TabInspection({
                           isBlock ? "bg-red-500/10" : isWarning ? "bg-amber-500/10" : ""
                         }`}
                       >
-                        {/* Severity Badge */}
                         <td className="px-3 py-2 whitespace-nowrap">
                           {isBlock ? (
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/15 text-red-300 border border-red-500/30">
@@ -423,12 +564,10 @@ export function TabInspection({
                           )}
                         </td>
 
-                        {/* Rule Code */}
                         <td className="px-3 py-2 font-bold text-foreground whitespace-nowrap">
                           {finding.rule_code}
                         </td>
 
-                        {/* Message & Difference */}
                         <td className="px-3 py-2 font-sans text-foreground leading-relaxed">
                           <div>{finding.message}</div>
                           {(finding.current_value || finding.expected_value) && (
@@ -443,7 +582,6 @@ export function TabInspection({
                           )}
                         </td>
 
-                        {/* Coordinate Breadcrumb */}
                         <td className="px-3 py-2 text-muted-foreground whitespace-nowrap font-mono text-[10px]">
                           {finding.sheet_name ? (
                             <span>
@@ -455,7 +593,6 @@ export function TabInspection({
                           )}
                         </td>
 
-                        {/* Action Button */}
                         <td className="px-3 py-2 text-center whitespace-nowrap">
                           <button
                             type="button"
@@ -486,41 +623,151 @@ export function TabInspection({
         </div>
       )}
 
-      {/* 6. Sub-Tab 2: AI Semantic Audit Evaluation & Analysis */}
+      {/* 6. Sub-Tab 2: AI Semantic Audit Evaluation & Percentage Scorecard */}
       {activeSubTab === "ai_audit" && (
         <div className="space-y-4 animate-in fade-in duration-150">
-          {/* Header Evaluation Status Card */}
-          <div className="border border-border rounded-lg bg-card p-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+          {/* Adjustable Passing Grade & Overall Percentage Card */}
+          <div className="border border-border rounded-lg bg-card p-4 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
               <div className="flex items-center gap-2">
                 <Bot className="w-4 h-4 text-amber-400" />
                 <h3 className="font-mono text-xs uppercase font-bold tracking-wider text-foreground">
-                  Status Hasil Audit Teks AI (Semantik)
+                  Evaluasi Persentase Audit Teks AI (Seluruh Dokumen D01–D13)
                 </h3>
               </div>
+
               <div className="flex items-center gap-2">
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
-                    revision.ai_review_status === "COMPLETED"
-                      ? resolvedAIDiscrepancies.length > 0
-                        ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
-                        : "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
-                      : revision.ai_review_status === "MANUAL_REVIEW_RECORDED"
-                      ? "bg-sky-500/10 text-sky-300 border-sky-500/30"
-                      : (revision.ai_review_status as string) === "BUDGET_EXCEEDED"
-                      ? "bg-rose-500/10 text-rose-300 border-rose-500/30"
-                      : "bg-muted text-muted-foreground border-border"
-                  }`}
-                >
-                  {revision.ai_review_status === "COMPLETED"
-                    ? resolvedAIDiscrepancies.length > 0
-                      ? "SELESAI (ADA TEMUAN)"
-                      : "SELESAI (BERSIH 100%)"
-                    : revision.ai_review_status}
-                </span>
+                {typeof overallScore === "number" && (
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                      isOverallPassed
+                        ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                        : "bg-red-500/15 text-red-300 border-red-500/40"
+                    }`}
+                  >
+                    {isOverallPassed
+                      ? `LULUS (≥ ${passingGrade.toFixed(1)}%)`
+                      : `TIDAK LULUS (< ${passingGrade.toFixed(1)}%)`}
+                  </span>
+                )}
                 <span className="text-[10px] font-mono text-muted-foreground">
                   {resolvedAIDiscrepancies.length} Diskrepansi
                 </span>
+              </div>
+            </div>
+
+            {/* Passing Grade Control + Overall Score Gauge */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Overall Percentage Score Box */}
+              <div className="p-3.5 rounded-lg border border-border bg-muted/30 flex items-center justify-between gap-4">
+                <div className="space-y-1 flex-1">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground font-bold block">
+                    Skor Penilaian AI Keseluruhan
+                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span
+                      className={`text-3xl font-mono font-bold tabular-nums ${
+                        typeof overallScore !== "number"
+                          ? "text-muted-foreground"
+                          : isOverallPassed
+                          ? "text-emerald-300"
+                          : "text-red-300"
+                      }`}
+                    >
+                      {typeof overallScore === "number" ? `${overallScore.toFixed(1)}%` : "—"}
+                    </span>
+                    <span className="text-[11px] font-mono text-muted-foreground">
+                      / 100%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-muted overflow-hidden border border-border/60">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        typeof overallScore !== "number"
+                          ? "bg-muted-foreground/30"
+                          : isOverallPassed
+                          ? "bg-emerald-500"
+                          : "bg-red-500"
+                      }`}
+                      style={{ width: `${typeof overallScore === "number" ? Math.min(100, overallScore) : 0}%` }}
+                    />
+                  </div>
+                </div>
+                <Award
+                  className={`w-9 h-9 shrink-0 ${
+                    typeof overallScore !== "number"
+                      ? "text-muted-foreground/40"
+                      : isOverallPassed
+                      ? "text-emerald-400"
+                      : "text-red-400"
+                  }`}
+                />
+              </div>
+
+              {/* Adjustable Passing Grade Box (Default 95%) */}
+              <div className="p-3.5 rounded-lg border border-primary/25 bg-primary/5 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="ai-passing-grade-input"
+                    className="text-[10px] font-mono uppercase tracking-wider text-foreground font-bold flex items-center gap-1.5"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-primary" />
+                    <span>Ambang Batas Kelulusan (Passing Grade)</span>
+                  </label>
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    Default: 95% {isSavingPassingGrade ? "• Menyimpan..." : ""}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    value={passingGrade}
+                    onChange={(e) => handlePassingGradeChange(parseFloat(e.target.value), false)}
+                    onMouseUp={(e) => handlePassingGradeChange(parseFloat((e.target as HTMLInputElement).value), true)}
+                    onTouchEnd={(e) => handlePassingGradeChange(parseFloat((e.target as HTMLInputElement).value), true)}
+                    className="flex-1 accent-primary cursor-pointer"
+                  />
+                  <div className="flex items-center gap-1 bg-background border border-border rounded px-2 py-1">
+                    <input
+                      id="ai-passing-grade-input"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={passingGrade}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (!Number.isNaN(v)) handlePassingGradeChange(v, true);
+                      }}
+                      className="w-14 bg-transparent text-right font-mono font-bold text-xs text-foreground outline-none tabular-nums"
+                    />
+                    <span className="text-xs font-mono text-muted-foreground">%</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-muted-foreground">Preset Cepat:</span>
+                  <div className="flex items-center gap-1.5">
+                    {[85, 90, 95, 100].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => handlePassingGradeChange(preset, true)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono border transition ${
+                          passingGrade === preset
+                            ? "bg-primary text-primary-foreground border-primary font-bold"
+                            : "bg-card text-muted-foreground border-border hover:text-foreground"
+                        }`}
+                      >
+                        {preset}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -529,24 +776,96 @@ export function TabInspection({
               {aiAuditResult?.summary || (
                 revision.ai_review_status === "COMPLETED"
                   ? resolvedAIDiscrepancies.length > 0
-                    ? `Audit semantik menemukan ${resolvedAIDiscrepancies.length} variasi penamaan atau substitusi merek antar lembar dokumen cetak (D01 s.d D05). Periksa rincian analisis di bawah.`
-                    : "Pemeriksaan semantik lengkap: Semua deskripsi barang, spesifikasi, dan satuan konsisten di seluruh lembar dokumen cetak (D01 s.d D06)."
+                    ? `Audit semantik menemukan ${resolvedAIDiscrepancies.length} variasi penamaan atau substitusi merek antar lembar dokumen cetak (D01 s.d D13). Klik 'Audit Teks AI (Semantik)' untuk memperbarui skor persentase seluruh dokumen.`
+                    : "Pemeriksaan semantik lengkap: Semua deskripsi barang, spesifikasi, dan satuan konsisten di seluruh lembar dokumen cetak (D01 s.d D13)."
                   : revision.ai_review_status === "MANUAL_REVIEW_RECORDED"
                   ? "Verifikasi manual telah dicatat secara resmi oleh staf pemeriksa. Paket diizinkan untuk diajukan tanpa pemblokiran sistem."
                   : (revision.ai_review_status as string) === "BUDGET_EXCEEDED"
                   ? "Batas anggaran AI bulanan telah tercapai. Anda dapat mencatat verifikasi manual untuk melanjutkan alur persetujuan."
-                  : "Audit teks AI belum dijalankan. Klik tombol 'Audit Teks AI (Semantik)' di atas untuk memeriksa konsistensi lintas dokumen secara otomatis."
+                  : "Audit teks AI belum dijalankan. Atur Passing Grade (default 95%) lalu klik tombol 'Audit Teks AI (Semantik)' di atas untuk menilai seluruh 13 dokumen secara otomatis."
               )}
             </div>
           </div>
 
-          {/* Fallback Warning Card if Budget Exceeded or Failed */}
+          {/* Per-Document Percentage Scorecard (D01-D13) */}
+          {documentScores.length > 0 && (
+            <div className="border border-border rounded-lg bg-card overflow-hidden">
+              <div className="px-4 py-2.5 bg-muted/40 border-b border-border flex flex-wrap items-center justify-between gap-2">
+                <h4 className="font-mono text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5 text-primary" />
+                  <span>Penilaian Persentase Per Dokumen (D01 s.d D13)</span>
+                </h4>
+                <span className="text-[10px] font-mono text-muted-foreground">
+                  {documentScores.filter((d) => d.passed).length} / {documentScores.length} Dokumen Memenuhi Passing Grade ({passingGrade.toFixed(1)}%)
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 p-4">
+                {documentScores.map((doc) => {
+                  const pass = doc.score_percentage >= passingGrade;
+                  return (
+                    <div
+                      key={doc.doc_code}
+                      className={`p-3 rounded-lg border space-y-2 transition ${
+                        pass
+                          ? "border-emerald-500/25 bg-emerald-500/5"
+                          : "border-red-500/35 bg-red-500/10"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="px-1.5 py-0.5 rounded bg-muted border border-border font-mono font-bold text-[10px] text-foreground shrink-0">
+                            {doc.doc_code}
+                          </span>
+                          <span className="font-semibold text-[11px] text-foreground truncate" title={doc.doc_name}>
+                            {doc.doc_name}
+                          </span>
+                        </div>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold shrink-0 ${
+                            pass
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : "bg-red-500/20 text-red-300"
+                          }`}
+                        >
+                          {pass ? "LULUS" : "GAGAL"}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-mono">
+                          <span className="text-muted-foreground">Skor Konsistensi</span>
+                          <span className={`font-bold tabular-nums ${pass ? "text-emerald-300" : "text-red-300"}`}>
+                            {doc.score_percentage.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-300 ${
+                              pass ? "bg-emerald-500" : "bg-red-500"
+                            }`}
+                            style={{ width: `${Math.min(100, doc.score_percentage)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-muted-foreground leading-relaxed">
+                        {doc.notes}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Fallback Warning Card if Budget Exceeded */}
           {(revision.ai_review_status as string) === "BUDGET_EXCEEDED" && (
             <div className="p-4 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs flex items-center justify-between gap-3">
               <div>
                 <h4 className="font-bold text-amber-200 font-mono">Batas Kuota AI Bulanan Tercapai</h4>
                 <p className="text-[11px] text-amber-300/80 mt-0.5 font-sans">
-                  Sistem beralih ke kebijakan verifikasi manual (PRD FR05 & AT16). Anda dapat mencatat verifikasi fisik tanpa memblokir pengajuan paket.
+                  Sistem beralih ke kebijakan verifikasi manual (PRD FR05 &amp; AT16). Anda dapat mencatat verifikasi fisik tanpa memblokir pengajuan paket.
                 </p>
               </div>
               <button
@@ -564,10 +883,10 @@ export function TabInspection({
             <div className="space-y-3">
               <div className="flex items-center justify-between px-1">
                 <span className="font-mono text-[11px] uppercase tracking-wider font-bold text-muted-foreground">
-                  Rincian Analisis & Rekomendasi Respons AI ({resolvedAIDiscrepancies.length} Item)
+                  Rincian Analisis &amp; Rekomendasi Respons AI ({resolvedAIDiscrepancies.length} Item)
                 </span>
                 <span className="text-[10px] text-muted-foreground font-mono">
-                  Advisory Mode (Tidak Menghentikan Alur Persetujuan)
+                  Advisory Mode (Gunakan AI Fix Recommendation untuk menyelaraskan otomatis)
                 </span>
               </div>
 
@@ -575,7 +894,6 @@ export function TabInspection({
                 const itemKey = `disc_${item.line_number || idx}_${item.sheet_a || "a"}_${item.sheet_b || "b"}`;
                 const isExpanded = Boolean(expandedReasoning[itemKey]);
 
-                // Badge styling per discrepancy type
                 const isBrand = item.discrepancy_type === "BRAND_SUBSTITUTION";
                 const isSpec = item.discrepancy_type === "SPECIFICATION_MISMATCH" || item.discrepancy_type === "SPEC_CONTRADICTION";
                 const isUnit = item.discrepancy_type === "UNIT_INCOMPATIBILITY" || item.discrepancy_type === "UNIT_MISMATCH";
@@ -585,10 +903,8 @@ export function TabInspection({
                     key={itemKey}
                     className="border border-border rounded-lg bg-card p-4 space-y-3 transition-all hover:border-muted-foreground/40 shadow-xs"
                   >
-                    {/* Item Header */}
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        {/* Discrepancy Type Badge */}
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
                             isBrand
@@ -603,7 +919,6 @@ export function TabInspection({
                           {item.discrepancy_type}
                         </span>
 
-                        {/* Severity Badge */}
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
                             item.severity === "WARNING"
@@ -619,7 +934,6 @@ export function TabInspection({
                         </span>
                       </div>
 
-                      {/* Documents Compared */}
                       <div className="flex items-center gap-1.5 text-[10px] font-mono bg-muted/60 px-2 py-0.5 rounded border border-border">
                         <FileText className="w-3 h-3 text-primary" />
                         <span className="font-bold text-foreground">{item.sheet_a || "D01"}</span>
@@ -628,7 +942,6 @@ export function TabInspection({
                       </div>
                     </div>
 
-                    {/* Text Inspection Box (Side-by-side) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] font-mono">
                       <div className="p-2.5 rounded bg-muted/30 border border-border">
                         <span className="text-[10px] text-muted-foreground block uppercase font-bold">
@@ -648,7 +961,6 @@ export function TabInspection({
                       </div>
                     </div>
 
-                    {/* Analysis Narrative */}
                     <div className="space-y-1">
                       <span className="text-[10px] font-mono uppercase font-bold text-muted-foreground block">
                         Analisis Evaluasi Semantik:
@@ -658,7 +970,6 @@ export function TabInspection({
                       </p>
                     </div>
 
-                    {/* Actionable Response */}
                     <div className="p-2.5 rounded bg-primary/5 border border-primary/20 space-y-1">
                       <span className="text-[10px] font-mono uppercase font-bold text-primary block flex items-center gap-1">
                         <ShieldCheck className="w-3 h-3" />
@@ -669,7 +980,6 @@ export function TabInspection({
                       </p>
                     </div>
 
-                    {/* Collapsible Reasoning View */}
                     <div className="pt-1">
                       <button
                         type="button"
@@ -685,7 +995,7 @@ export function TabInspection({
                         <div className="mt-2.5 p-3 rounded-md bg-muted/60 border border-border space-y-2 text-[11px] font-mono animate-in fade-in duration-200">
                           <div className="flex items-center gap-1.5 text-foreground font-semibold">
                             <Bot className="w-3.5 h-3.5 text-sky-400" />
-                            <span>Rasionalitas & Dasar Analisis Regulasi Pengadaan:</span>
+                            <span>Rasionalitas &amp; Dasar Analisis Regulasi Pengadaan:</span>
                           </div>
                           <p className="text-muted-foreground font-sans leading-relaxed">
                             {isBrand
@@ -704,7 +1014,7 @@ export function TabInspection({
                               </strong>{" "}
                               (Advisori)
                             </span>
-                            <span>Kepatuhan: PRD FR05 & AT16</span>
+                            <span>Kepatuhan: PRD FR05 &amp; AT16</span>
                           </div>
                         </div>
                       )}
@@ -717,9 +1027,11 @@ export function TabInspection({
             revision.ai_review_status === "COMPLETED" && (
               <div className="border border-emerald-500/30 bg-emerald-500/10 p-6 rounded-lg text-center font-mono">
                 <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-                <h4 className="text-sm font-bold text-emerald-200">Evaluasi Semantik Bersih (100% Konsisten)</h4>
+                <h4 className="text-sm font-bold text-emerald-200">
+                  Evaluasi Semantik Bersih (100% Konsisten)
+                </h4>
                 <p className="text-xs text-emerald-300/80 mt-1 font-sans max-w-md mx-auto leading-relaxed">
-                  Semua deskripsi nama barang, merek, dan spesifikasi konsisten di seluruh lembar cetak dokumen D01 hingga D06. Tidak ditemukan indikasi substitusi merek atau kontradiksi spesifikasi.
+                  Semua deskripsi nama barang, merek, dan spesifikasi konsisten di seluruh lembar cetak dokumen D01 hingga D13. Tidak ditemukan indikasi substitusi merek atau kontradiksi spesifikasi.
                 </p>
               </div>
             )
@@ -734,7 +1046,7 @@ export function TabInspection({
             <div className="px-4 py-3 border-b border-border flex items-center gap-2 bg-primary/10">
               <FileSignature className="w-4 h-4 text-primary" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
-                Catat Verifikasi Manual (Fallback PRD FR05 & AT16)
+                Catat Verifikasi Manual (Fallback PRD FR05 &amp; AT16)
               </h3>
             </div>
 
@@ -777,6 +1089,24 @@ export function TabInspection({
           </div>
         </div>
       )}
+
+      {/* 8. 4-Step AI Fix Recommendation Modal */}
+      <AIFixModal
+        isOpen={isAutoFixOpen}
+        revision={revision}
+        blockCount={blockCount}
+        warningCount={warningCount}
+        aiFindingsCount={aiFindingsCount}
+        onClose={() => setIsAutoFixOpen(false)}
+        onApplied={handleAIFixesApplied}
+        onScrapped={() =>
+          setNotification({
+            type: "info",
+            title: "Rekomendasi AI Fix Dibuang (Scrap)",
+            message: "Tidak ada perubahan nilai yang diterapkan ke revisi paket pengadaan.",
+          })
+        }
+      />
     </div>
   );
 }

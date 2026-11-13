@@ -4,6 +4,9 @@ import { LogisticsRecord, EvidenceAttachment } from "@/types/logistics";
 import { Artifact, GenerationJob } from "@/types/documents";
 import {
   SemanticAuditResponse,
+  AIFixRecommendationResponse,
+  AIFixChangeItem,
+  AIFixApplyResponse,
   AIUsageResponse,
   CandidateMappingProposal,
   AIRuntimeConfig,
@@ -337,9 +340,30 @@ export const apiClient = {
     }),
 
   // AI Assistance & Semantic Verification
-  auditWithAI: (revisionId: string) =>
+  auditWithAI: (revisionId: string, passingGrade: number = 95) =>
     request<SemanticAuditResponse>(`/api/v1/ai/revisions/${revisionId}/audit`, {
       method: "POST",
+      body: JSON.stringify({ passing_grade: passingGrade }),
+    }),
+
+  getLatestAIAudit: (revisionId: string) =>
+    request<SemanticAuditResponse | null>(`/api/v1/ai/revisions/${revisionId}/audit/latest`),
+
+  updateAIAuditPassingGrade: (revisionId: string, passingGrade: number) =>
+    request<SemanticAuditResponse>(`/api/v1/ai/revisions/${revisionId}/audit/passing-grade`, {
+      method: "PATCH",
+      body: JSON.stringify({ passing_grade: passingGrade }),
+    }),
+
+  getAIFixRecommendations: (revisionId: string) =>
+    request<AIFixRecommendationResponse>(`/api/v1/ai/revisions/${revisionId}/fix-recommendations`, {
+      method: "POST",
+    }),
+
+  applyAIFixes: (revisionId: string, expectedVersion: number, changes: AIFixChangeItem[]) =>
+    request<AIFixApplyResponse>(`/api/v1/ai/revisions/${revisionId}/apply-fixes`, {
+      method: "POST",
+      body: JSON.stringify({ expected_version: expectedVersion, changes }),
     }),
 
   recordManualReview: (revisionId: string, verifierName: string, verificationNotes: string) =>

@@ -314,7 +314,15 @@ export default function PackageWorkspacePage() {
           <TabInspection
             revision={latestRevision}
             validationRun={validationRun}
+            isReadOnly={isReadOnly}
             onRefresh={handleRefreshAll}
+            onClearDirty={() => {
+              setIsDirty(false);
+              setDirtyLines(null);
+              setDirtyIdentity(null);
+              setDirtyDates(null);
+              setDirtyLogistics(null);
+            }}
             onNavigateToField={(tabKey) => handleTabChange(tabKey)}
           />
         )}

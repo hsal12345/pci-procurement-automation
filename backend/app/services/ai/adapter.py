@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import logging
 import re
@@ -466,20 +467,151 @@ class MockAIAdapter(BaseAIAdapter):
 
         # Check if requested schema is DiscrepancyAuditLLMResult
         if "DiscrepancyAuditLLMResult" in schema_name:
+            from app.services.ai.discrepancy_auditor import CANONICAL_13_DOCUMENTS, SemanticDiscrepancyAuditor
+            from app.schemas.ai import SemanticDiscrepancyItem
+
+            total_lines_match = re.search(r"total_lines=(\d+)", user_prompt)
+            passing_match = re.search(r"passing_grade=([\d.]+)%", user_prompt)
+            total_lines = int(total_lines_match.group(1)) if total_lines_match else 1
+            passing_grade = float(passing_match.group(1)) if passing_match else 95.0
+
+            pair_pattern = re.compile(
+                r'<item_pair line="(\d+)">'
+                r'<doc_a code="([^"]*)">(.*?)</doc_a>'
+                r'<doc_b code="([^"]*)">(.*?)</doc_b>'
+                r'<spec>(.*?)</spec>'
+                r'</item_pair>',
+                re.DOTALL,
+            )
+            parsed_findings = []
+            for m in pair_pattern.finditer(user_prompt):
+                line_num = int(m.group(1))
+                sheet_a = m.group(2) or "D01"
+                raw_a = html.unescape(m.group(3)).strip()
+                sheet_b = m.group(4) or "D05"
+                raw_b = html.unescape(m.group(5)).strip()
+                raw_spec = html.unescape(m.group(6)).strip()
+
+                has_nums_a = re.findall(r"\d+(?:[.,]\d+)?\s*(?:ml|l|liter|gr|gram|kg|pcs|rim|lembar)", raw_a.lower())
+                has_nums_b = re.findall(r"\d+(?:[.,]\d+)?\s*(?:ml|l|liter|gr|gram|kg|pcs|rim|lembar)", raw_b.lower())
+                if has_nums_a and has_nums_b and has_nums_a != has_nums_b:
+                    dtype = "SPECIFICATION_MISMATCH"
+                    sev = "WARNING"
+                    msg = f"{sheet_a} mencantumkan '{raw_a}', sedangkan {sheet_b} mencantumkan '{raw_b}' (perbedaan spesifikasi/ukuran)."
+                    act = f"Verifikasi kesesuaian spesifikasi teknis ({raw_spec or raw_b}) dan catat pada Berita Acara Klarifikasi (D04)."
+                else:
+                    dtype = "BRAND_SUBSTITUTION"
+                    sev = "WARNING"
+                    msg = f"{sheet_a} menyebutkan '{raw_a}', sedangkan {sheet_b} menyebutkan '{raw_b}'."
+                    act = "Konfirmasi kesepakatan merek dagang/penamaan pada hasil klarifikasi harga (D04)."
+
+                parsed_findings.append(
+                    SemanticDiscrepancyItem(
+                        sheet_a=sheet_a,
+                        sheet_b=sheet_b,
+                        line_number=line_num,
+                        item_name=raw_a,
+                        discrepancy_type=dtype,
+                        severity=sev,
+                        message=msg,
+                        recommended_action=act,
+                    )
+                )
+
+            if not parsed_findings:
+                parsed_findings = [
+                    SemanticDiscrepancyItem(
+                        sheet_a="D01",
+                        sheet_b="D05",
+                        line_number=1,
+                        item_name="Pembersih Porselen",
+                        discrepancy_type="BRAND_SUBSTITUTION",
+                        severity="WARNING",
+                        message="D01 menyebutkan 'Pembersih Porselen', sedangkan D05 menyebutkan merek 'Porstex'.",
+                        recommended_action="Konfirmasi kesepakatan merek dagang hasil klarifikasi harga.",
+                    )
+                ]
+
+            doc_scores, overall = SemanticDiscrepancyAuditor.build_document_scores(
+                findings=parsed_findings,
+                total_lines=max(total_lines, len(parsed_findings)),
+                passing_grade=passing_grade,
+            )
             payload = {
-                "findings": [
-                    {
-                        "sheet_a": "D01",
-                        "sheet_b": "D05",
-                        "line_number": 1,
-                        "item_name": "Pembersih Porselen",
-                        "discrepancy_type": "BRAND_SUBSTITUTION",
-                        "severity": "WARNING",
-                        "message": "D01 menyebutkan 'Pembersih Porselen', sedangkan D05 menyebutkan merek 'Porstex'.",
-                        "recommended_action": "Konfirmasi kesepakatan merek dagang hasil klarifikasi harga."
-                    }
-                ],
-                "summary": "Pemeriksaan semantik selesai: ditemukan 1 potensi substitusi merek."
+                "findings": [f.model_dump() for f in parsed_findings],
+                "overall_score": overall,
+                "document_scores": [d.model_dump() for d in doc_scores],
+                "summary": (
+                    f"Pemeriksaan semantik selesai pada {len(CANONICAL_13_DOCUMENTS)} dokumen: "
+                    f"ditemukan {len(parsed_findings)} potensi variasi/diskrepansi teks dengan skor keseluruhan {overall:.1f}% "
+                    f"(Passing Grade {passing_grade:.1f}%)."
+                ),
+            }
+            return response_schema.model_validate(payload), prompt_tokens, completion_tokens, latency_ms
+
+        # Check if requested schema is AIFixLLMProposal
+        if "AIFixLLMProposal" in schema_name:
+            findings_match = re.search(r'<findings count="(\d+)">', user_prompt)
+            findings_cnt = int(findings_match.group(1)) if findings_match else 0
+
+            line_pattern = re.compile(
+                r'<line num="(\d+)" orig="([^"]*)" conf="([^"]*)" spec="([^"]*)"',
+                re.DOTALL,
+            )
+            line_text_fixes = []
+            for m in line_pattern.finditer(user_prompt):
+                lnum = int(m.group(1))
+                orig = html.unescape(m.group(2)).strip()
+                conf = html.unescape(m.group(3)).strip()
+                spec = html.unescape(m.group(4)).strip()
+                orig_low = orig.lower()
+                is_placeholder = orig_low.startswith("barang baru") or orig_low.startswith("item ") or orig_low.startswith("item#")
+                if orig and conf and orig_low != conf.lower() and not is_placeholder:
+                    if orig_low in conf.lower():
+                        unified = conf
+                    elif conf.lower() in orig_low:
+                        unified = orig
+                    else:
+                        unified = f"{orig} ({conf})"
+                    line_text_fixes.append({
+                        "line_number": lnum,
+                        "proposed_original_description": unified,
+                        "proposed_confirmed_description": unified,
+                        "proposed_specification": spec or None,
+                        "reasoning": f"Menyelaraskan deskripsi D01 ('{orig}') dan D05 ('{conf}') menjadi '{unified}' agar konsisten di seluruh 13 dokumen SPJ."
+                    })
+
+            reasoning_steps = [
+                {
+                    "step_number": 1,
+                    "title": "Pemindaian Temuan Validasi & Anomali Teks",
+                    "detail": f"Memeriksa {findings_cnt} temuan aturan bisnis (BR01–BR15) serta keselarasan teks antar lembar dokumen.",
+                    "status": "COMPLETED",
+                },
+                {
+                    "step_number": 2,
+                    "title": "Audit Kelengkapan Identitas, Pejabat & Kebijakan Pajak",
+                    "detail": "Memastikan snapshot sekolah, penyedia, pejabat penandatangan wajib (BR09), dan tarif pajak aktif (BR06) terisi lengkap.",
+                    "status": "COMPLETED",
+                },
+                {
+                    "step_number": 3,
+                    "title": "Rekonstruksi Kronologi Tanggal & Penomoran 13 Dokumen",
+                    "detail": "Menyusun ulang urutan tanggal hari kerja D01–D13 (BR07/BR12) serta mengisi nomor dokumen yang kosong atau duplikat (BR02/BR08).",
+                    "status": "COMPLETED",
+                },
+                {
+                    "step_number": 4,
+                    "title": "Rekonsiliasi Harga, Aritmatika & Deskripsi Semantik",
+                    "detail": f"Memverifikasi kalkulasi subtotal, pajak, grand total (BR05), serta menyiapkan {len(line_text_fixes)} penyelarasan deskripsi item.",
+                    "status": "COMPLETED",
+                },
+            ]
+            payload = {
+                "reasoning_steps": reasoning_steps,
+                "line_text_fixes": line_text_fixes,
+                "recommended_anchor_hps_date": None,
+                "summary": "AI telah menganalisis seluruh temuan kepatuhan dan diskrepansi semantik serta menyusun rekomendasi perbaikan siap tinjau.",
             }
             return response_schema.model_validate(payload), prompt_tokens, completion_tokens, latency_ms
 

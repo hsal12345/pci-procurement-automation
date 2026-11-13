@@ -27,6 +27,31 @@ class SemanticDiscrepancyItem(BaseModel):
     recommended_action: str = Field(..., description="Actionable recommendation for procurement staff.")
 
 
+class DocumentSemanticScoreItem(BaseModel):
+    """Percentage semantic evaluation for a single SPJ procurement document (D01-D13)."""
+    doc_code: str = Field(..., description="Canonical document code (D01..D13).")
+    doc_name: str = Field(..., description="Document title.")
+    score_percentage: float = Field(..., ge=0.0, le=100.0, description="Consistency percentage (0-100).")
+    passed: bool = Field(True, description="True if score_percentage >= passing_grade.")
+    issues_count: int = Field(0, description="Number of semantic/textual issues affecting this document.")
+    notes: str = Field("", description="Brief Indonesian assessment note for this document.")
+
+
+class SemanticAuditRequest(BaseModel):
+    """Optional request parameters for AI semantic audit."""
+    passing_grade: float = Field(
+        95.0,
+        ge=0.0,
+        le=100.0,
+        description="Minimum percentage passing grade required across documents (default 95%)."
+    )
+
+
+class UpdatePassingGradeRequest(BaseModel):
+    """Request payload to adjust the passing grade threshold on the latest audit report."""
+    passing_grade: float = Field(..., ge=0.0, le=100.0, description="Adjusted passing grade percentage (0-100).")
+
+
 class SemanticAuditResponse(BaseModel):
     """Result of cross-document semantic discrepancy audit on a package revision."""
     revision_id: UUID
@@ -34,6 +59,10 @@ class SemanticAuditResponse(BaseModel):
     status: str  # COMPLETED, BUDGET_EXCEEDED, AI_UNAVAILABLE, MANUAL_REVIEW_RECORDED
     findings_count: int = 0
     findings: List[SemanticDiscrepancyItem] = []
+    overall_score: float = Field(100.0, ge=0.0, le=100.0, description="Overall semantic consistency score percentage across all documents.")
+    passing_grade: float = Field(95.0, ge=0.0, le=100.0, description="Active passing grade threshold percentage.")
+    passed: bool = Field(True, description="True if overall_score >= passing_grade.")
+    document_scores: List[DocumentSemanticScoreItem] = Field(default_factory=list, description="Per-document percentage judgment across D01-D13.")
     summary: str
 
 
@@ -224,4 +253,61 @@ class SystemKnowledgeInfoResponse(BaseModel):
     content: str
     size_bytes: int
     sections: List[str] = []
+
+
+# =========================================================================
+# AI Auto-Fix Recommendation & Apply Schemas (5. Pemeriksaan Sistem)
+# =========================================================================
+
+class AIFixReasoningStep(BaseModel):
+    """Single step in the AI reasoning chain while diagnosing revision issues."""
+    step_number: int
+    title: str
+    detail: str
+    status: str = "COMPLETED"
+
+
+class AIFixChangeItem(BaseModel):
+    """Proposed atomic fix to a field, document event, document number, line item, or snapshot."""
+    fix_id: str
+    category: str  # IDENTITY, OFFICIALS, TAX_POLICY, DATES, DOC_NUMBERS, ITEMS_TEXT, ITEMS_PRICING, TOTALS, LOGISTICS
+    rule_code: str  # BR01..BR15, AI_SEMANTIC
+    target_tab: str  # identity, items, dates, logistics
+    field_path: str
+    field_label: str
+    current_value_display: str
+    proposed_value_display: str
+    proposed_value_json: Any
+    reasoning: str
+    severity_resolved: str = "BLOCK"
+
+
+class AIFixRecommendationResponse(BaseModel):
+    """Structured AI auto-fix proposal with reasoning steps and reviewable changes."""
+    revision_id: UUID
+    status: str  # COMPLETED, NO_ISSUES, BUDGET_EXCEEDED, DISABLED, FAILED
+    provider: str = "mock"
+    model: str = "mock-rule-engine"
+    reasoning_steps: List[AIFixReasoningStep] = Field(default_factory=list)
+    changes: List[AIFixChangeItem] = Field(default_factory=list)
+    summary: str
+    findings_before_count: int = 0
+    estimated_resolved_count: int = 0
+
+
+class AIFixApplyRequest(BaseModel):
+    """User-reviewed and approved list of AI fix changes to apply to the revision."""
+    expected_version: int
+    changes: List[AIFixChangeItem] = Field(default_factory=list)
+
+
+class AIFixApplyResponse(BaseModel):
+    """Confirmation and fresh validation summary after applying AI fixes."""
+    revision_id: UUID
+    new_version: int
+    applied_count: int
+    validation_passed: bool
+    remaining_errors: int
+    remaining_warnings: int
+    message: str
 

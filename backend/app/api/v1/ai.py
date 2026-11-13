@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -12,7 +12,12 @@ from app.models.imports import ImportRecord
 from app.models.packages import PackageRevision
 from app.schemas.ai import (
     CandidateMappingProposal,
+    SemanticAuditRequest,
     SemanticAuditResponse,
+    UpdatePassingGradeRequest,
+    AIFixRecommendationResponse,
+    AIFixApplyRequest,
+    AIFixApplyResponse,
     AIUsageResponse,
     ManualReviewRecordRequest,
     ManualReviewRecordResponse,
@@ -30,6 +35,7 @@ from app.schemas.ai import (
 from app.schemas.common import UserRoleEnum
 from app.services.ai.mapping_assistant import AIMappingAssistant
 from app.services.ai.discrepancy_auditor import SemanticDiscrepancyAuditor
+from app.services.ai.autofix_assistant import AIAutoFixAssistant
 from app.services.ai.budget_guard import AIBudgetGuard
 from app.services.ai.runtime_manager import runtime_manager
 from app.services.ai.system_knowledge_service import system_knowledge_service
@@ -429,19 +435,85 @@ async def ai_suggest_mapping(
 @router.post("/revisions/{id}/audit", response_model=SemanticAuditResponse)
 async def ai_audit_revision(
     id: UUID,
+    payload: Optional[SemanticAuditRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
     actor_role: str = Depends(require_admin_or_finance),
     actor_name: str = Depends(get_current_actor_name)
 ):
     """Performs cross-document semantic discrepancy auditing across revision items,
-    identifying brand substitutions, unit mismatches, or spec contradictions (PRD FR05, AT16).
+    judging all 13 SPJ documents by percentage against an adjustable passing grade (default 95%).
     """
+    passing_grade = payload.passing_grade if payload else 95.0
     audit_resp = await SemanticDiscrepancyAuditor.audit_revision(
         db=db,
         revision_id=id,
-        actor_name=actor_name
+        actor_name=actor_name,
+        passing_grade=passing_grade,
     )
     return audit_resp
+
+
+@router.get("/revisions/{id}/audit/latest", response_model=Optional[SemanticAuditResponse])
+async def get_latest_ai_audit(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieves the most recent persisted percentage-based AI semantic audit report."""
+    return await SemanticDiscrepancyAuditor.get_latest_report(db=db, revision_id=id)
+
+
+@router.patch("/revisions/{id}/audit/passing-grade", response_model=SemanticAuditResponse)
+async def update_ai_audit_passing_grade(
+    id: UUID,
+    payload: UpdatePassingGradeRequest,
+    db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_or_finance),
+):
+    """Adjusts the passing grade percentage on the latest semantic audit report and re-evaluates pass/fail."""
+    updated = await SemanticDiscrepancyAuditor.update_passing_grade(
+        db=db,
+        revision_id=id,
+        passing_grade=payload.passing_grade,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=404,
+            detail="Belum ada hasil Audit Teks AI tersimpan untuk revisi ini."
+        )
+    return updated
+
+
+@router.post("/revisions/{id}/fix-recommendations", response_model=AIFixRecommendationResponse)
+async def generate_ai_fix_recommendations(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_or_finance),
+):
+    """Generates AI-powered auto-fix reasoning steps and reviewable field changes
+    for all deterministic rule violations (BR01-BR15) and semantic discrepancies.
+    """
+    return await AIAutoFixAssistant.generate_recommendations(db=db, revision_id=id)
+
+
+@router.post("/revisions/{id}/apply-fixes", response_model=AIFixApplyResponse)
+async def apply_ai_fix_recommendations(
+    id: UUID,
+    payload: AIFixApplyRequest,
+    db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_or_finance),
+    actor_name: str = Depends(get_current_actor_name),
+):
+    """Applies user-approved AI auto-fix changes to the revision, logs an audit event,
+    and re-runs deterministic validation.
+    """
+    return await AIAutoFixAssistant.apply_fixes(
+        db=db,
+        revision_id=id,
+        expected_version=payload.expected_version,
+        changes=payload.changes,
+        actor_name=actor_name,
+        actor_role=actor_role,
+    )
 
 
 @router.post("/revisions/{id}/record-manual-review", response_model=ManualReviewRecordResponse)

@@ -46,6 +46,7 @@ from app.models.archive import (
 )
 from app.models.ai import (
     AIUsageLog,
+    AISemanticAuditReport,
 )
 from app.models.users import (
     User,
@@ -85,6 +86,7 @@ __all__ = [
     "LogisticsEvidence",
     "ArchiveRecord",
     "AIUsageLog",
+    "AISemanticAuditReport",
     "User",
     "VALID_USER_ROLES",
 ]
