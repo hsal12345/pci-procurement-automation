@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -8,9 +10,10 @@ from sqlalchemy import select
 
 from app.api.deps import get_current_actor_name, get_current_user_role
 from app.config import settings
-from app.database import get_db
+from app.database import AsyncSessionLocal, get_db
 from app.models.imports import ImportRecord
 from app.models.packages import PackageRevision
+from app.services.import_progress import import_progress_tracker
 from app.schemas.ai import (
     CandidateMappingProposal,
     AIMappingSuggestRequest,
@@ -406,36 +409,28 @@ def _resolve_import_workbook_path(rec: ImportRecord) -> Path:
 
     raise HTTPException(
         status_code=404,
-        detail="Berkas fisik spreadsheet tidak ditemukan di penyimpanan server."
+        detail="Berkas fisik dokumen impor tidak ditemukan di penyimpanan server."
     )
 
 
-@router.post("/imports/{id}/suggest-mapping", response_model=CandidateMappingProposal)
-async def ai_suggest_mapping(
-    id: UUID,
-    payload: Optional[AIMappingSuggestRequest] = Body(default=None),
-    db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance),
-    actor_name: str = Depends(get_current_actor_name),
+async def _execute_mapping_and_persist(
+    db: AsyncSession,
+    rec: ImportRecord,
+    workbook_path: Path,
+    requested_sheet: Optional[str],
+    actor_name: str,
 ):
-    """Requests an intelligent candidate column mapping proposal from the advisory AI
-    for non-standard uploaded spreadsheets (PRD Section FR02 and FR05 / SD-02 Step 3).
-    """
-    res = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
-    rec = res.scalar_one_or_none()
-    if not rec:
-        raise HTTPException(status_code=404, detail=f"Data impor dengan ID {id} tidak ditemukan.")
-
-    workbook_path = _resolve_import_workbook_path(rec)
-    requested_sheet = payload.sheet_name if payload and payload.sheet_name else (rec.sheet_metadata or {}).get("active_sheet")
-
     proposal, status_code, err_msg = await AIMappingAssistant.suggest_mapping_for_workbook(
         workbook_path=workbook_path,
         db=db,
         sheet_name=requested_sheet,
+        import_id=str(rec.id),
+        pre_extracted_payload=rec.candidate_payload,
+        upload_context=(rec.sheet_metadata or {}).get("upload_context"),
     )
 
     updated_meta = dict(rec.sheet_metadata or {})
+    updated_meta["progress"] = import_progress_tracker.get_state(str(rec.id), fallback_meta=updated_meta)
 
     if not proposal:
         updated_meta["ai_status"] = status_code or "UNAVAILABLE"
@@ -451,16 +446,7 @@ async def ai_suggest_mapping(
             reason=err_msg or "Layanan AI tidak tersedia; dialihkan ke pemetaan kolom manual."
         )
         await db.commit()
-
-        if status_code == "BUDGET_EXCEEDED":
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=err_msg or "Batas anggaran AI bulanan tercapai. Silakan lakukan pemetaan kolom manual."
-            )
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=err_msg or "Layanan bantuan pemetaan AI sedang tidak tersedia. Gunakan pemetaan manual."
-        )
+        return None, status_code, err_msg
 
     updated_meta["ai_status"] = status_code or "COMPLETED"
     updated_meta["ai_error"] = None
@@ -481,8 +467,144 @@ async def ai_suggest_mapping(
         reason="Usulan pemetaan kolom AI berhasil dihasilkan untuk ditinjau staf."
     )
     await db.commit()
+    return proposal, status_code, err_msg
+
+
+async def _run_async_mapping_job(
+    import_id: UUID,
+    workbook_path: Path,
+    requested_sheet: Optional[str],
+    actor_name: str,
+) -> None:
+    logger = logging.getLogger(__name__)
+    async with AsyncSessionLocal() as db:
+        try:
+            res = await db.execute(select(ImportRecord).where(ImportRecord.id == import_id))
+            rec = res.scalar_one_or_none()
+            if not rec:
+                import_progress_tracker.emit(
+                    str(import_id),
+                    stage="FINALIZE",
+                    percent=100,
+                    detail="Data impor tidak ditemukan saat menjalankan tugas latar belakang.",
+                    status="FAILED",
+                    error="ImportRecord not found",
+                )
+                return
+
+            await _execute_mapping_and_persist(
+                db=db,
+                rec=rec,
+                workbook_path=workbook_path,
+                requested_sheet=requested_sheet,
+                actor_name=actor_name,
+            )
+        except Exception as exc:
+            logger.exception(f"Background AI mapping failed for import {import_id}: {exc}")
+            import_progress_tracker.emit(
+                str(import_id),
+                stage="FINALIZE",
+                percent=100,
+                detail=f"Terjadi galat tak terduga saat pemetaan AI: {exc}",
+                status="FALLBACK",
+                error=str(exc),
+            )
+
+
+@router.post("/imports/{id}/suggest-mapping", response_model=CandidateMappingProposal)
+async def ai_suggest_mapping(
+    id: UUID,
+    payload: Optional[AIMappingSuggestRequest] = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_or_finance),
+    actor_name: str = Depends(get_current_actor_name),
+):
+    """Requests an intelligent candidate column mapping proposal from the advisory AI
+    for uploaded procurement documents (.xlsx, .pdf, .docx, .doc) (FR02 & FR05 / SD-02 Step 3).
+    """
+    res = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
+    rec = res.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail=f"Data impor dengan ID {id} tidak ditemukan.")
+
+    workbook_path = _resolve_import_workbook_path(rec)
+    requested_sheet = payload.sheet_name if payload and payload.sheet_name else (rec.sheet_metadata or {}).get("active_sheet")
+    cfg = runtime_manager.get_config()
+    import_progress_tracker.start_run(
+        str(rec.id),
+        source_format=(rec.sheet_metadata or {}).get("source_format"),
+        provider=cfg.provider,
+        model=cfg.model,
+        runtime_mode=cfg.runtime_mode,
+    )
+
+    proposal, status_code, err_msg = await _execute_mapping_and_persist(
+        db=db,
+        rec=rec,
+        workbook_path=workbook_path,
+        requested_sheet=requested_sheet,
+        actor_name=actor_name,
+    )
+
+    if not proposal:
+        if status_code == "BUDGET_EXCEEDED":
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=err_msg or "Batas anggaran AI bulanan tercapai. Silakan lakukan pemetaan kolom manual."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=err_msg or "Layanan bantuan pemetaan AI sedang tidak tersedia. Gunakan pemetaan manual."
+        )
 
     return proposal
+
+
+@router.post("/imports/{id}/suggest-mapping-async", status_code=status.HTTP_202_ACCEPTED)
+async def ai_suggest_mapping_async(
+    id: UUID,
+    payload: Optional[AIMappingSuggestRequest] = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_or_finance),
+    actor_name: str = Depends(get_current_actor_name),
+):
+    """Starts advisory AI column mapping in the background and streams real-time progress
+    via GET /api/v1/imports/{id}/progress/stream.
+    """
+    res = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
+    rec = res.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail=f"Data impor dengan ID {id} tidak ditemukan.")
+
+    workbook_path = _resolve_import_workbook_path(rec)
+    requested_sheet = payload.sheet_name if payload and payload.sheet_name else (rec.sheet_metadata or {}).get("active_sheet")
+    cfg = runtime_manager.get_config()
+    initial_progress = import_progress_tracker.start_run(
+        str(rec.id),
+        source_format=(rec.sheet_metadata or {}).get("source_format"),
+        provider=cfg.provider,
+        model=cfg.model,
+        runtime_mode=cfg.runtime_mode,
+    )
+
+    asyncio.create_task(
+        _run_async_mapping_job(
+            import_id=rec.id,
+            workbook_path=workbook_path,
+            requested_sheet=requested_sheet,
+            actor_name=actor_name,
+        )
+    )
+
+    return {
+        "import_id": str(rec.id),
+        "status": "RUNNING",
+        "sheet_name": requested_sheet,
+        "provider": cfg.provider,
+        "model": cfg.model,
+        "runtime_mode": cfg.runtime_mode,
+        "progress": initial_progress,
+    }
 
 
 @router.post("/revisions/{id}/audit", response_model=SemanticAuditResponse)

@@ -25,14 +25,57 @@ export interface CandidateLineItem {
   raw_formula?: string | null;
 }
 
+export interface ImportProgressEventItem {
+  timestamp: string;
+  elapsed_ms: number;
+  stage: "UPLOAD" | "EXTRACT_VALIDATE" | "PREPARE_CONTEXT" | "LLM_INFERENCE" | "FINALIZE" | string;
+  percent: number;
+  label: string;
+  detail: string;
+  status: string;
+}
+
+export interface ImportProgressState {
+  import_id: string;
+  stage: "UPLOAD" | "EXTRACT_VALIDATE" | "PREPARE_CONTEXT" | "LLM_INFERENCE" | "FINALIZE" | string;
+  stage_index: number;
+  total_stages: number;
+  percent: number;
+  label: string;
+  detail: string;
+  status: "IDLE" | "RUNNING" | "COMPLETED" | "AMBIGUOUS" | "FALLBACK" | "FAILED" | string;
+  source_format?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  runtime_mode?: string | null;
+  extracted_stats?: Record<string, any>;
+  elapsed_ms: number;
+  updated_at?: string;
+  events: ImportProgressEventItem[];
+  result?: {
+    sheet_name?: string | null;
+    header_row_index: number;
+    column_mapping: Record<string, number>;
+    confidence_score: number;
+    reasoning?: string;
+    is_ambiguous: boolean;
+    detected_school_name?: string | null;
+    detected_fiscal_year?: number | null;
+    detected_quarter?: number | null;
+  } | null;
+  error?: string | null;
+}
+
 export interface ImportUploadResponse {
   import_id: string;
   filename: string;
   file_hash: string;
   file_size: number;
   status: string;
+  source_format?: string;
   sheet_names: string[];
   active_sheet?: string | null;
+  extraction_stats?: Record<string, any>;
   message: string;
 }
 
@@ -41,6 +84,7 @@ export interface ImportPreviewResponse {
   filename: string;
   file_hash?: string | null;
   status: string;
+  source_format?: string;
   sheet_names: string[];
   active_sheet: string;
   raw_preview_rows: any[][];
@@ -53,10 +97,20 @@ export interface ImportPreviewResponse {
     confidence_score: number;
     reasoning?: string;
     is_ambiguous: boolean;
+    detected_school_name?: string | null;
+    detected_fiscal_year?: number | null;
+    detected_quarter?: number | null;
   } | null;
   ai_status?: string | null;
   ai_error?: string | null;
   upload_context: Record<string, any>;
+  document_context?: {
+    source_format?: string;
+    snippets?: string[];
+    section_contexts?: Record<string, string[]>;
+  };
+  extraction_stats?: Record<string, any>;
+  progress?: ImportProgressState | null;
   school_candidate: Record<string, any>;
   transaction_metadata: Record<string, any>;
   candidate_lines: CandidateLineItem[];

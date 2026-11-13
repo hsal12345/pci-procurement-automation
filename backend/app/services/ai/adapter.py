@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Tuple, Type, TypeVar
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Type, TypeVar
 import httpx
 from pydantic import BaseModel
 from app.config import settings
@@ -86,9 +86,17 @@ class OpenAICompatibleAdapter(BaseAIAdapter):
         self,
         system_prompt: str,
         user_prompt: str,
-        response_schema: Type[T]
+        response_schema: Type[T],
+        status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> Tuple[T, int, int, int]:
         endpoint = f"{self.base_url}/chat/completions"
+
+        async def _notify(msg: str) -> None:
+            if status_callback:
+                try:
+                    await status_callback(msg)
+                except Exception:
+                    pass
         headers = {
             "Content-Type": "application/json",
         }
@@ -129,6 +137,9 @@ class OpenAICompatibleAdapter(BaseAIAdapter):
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             for attempt in range(retries + 1):
                 try:
+                    await _notify(
+                        f"Mengirim konteks terstruktur ke model '{self.model}' (percobaan {attempt + 1}/{retries + 1})..."
+                    )
                     resp = await client.post(endpoint, headers=headers, json=body)
 
                     # Handle HTTP 400 Bad Request: Many local engines (LM Studio, older Ollama, vLLM, certain models)
@@ -140,10 +151,12 @@ class OpenAICompatibleAdapter(BaseAIAdapter):
 
                         if "response_format" in body:
                             logger.info("Retrying AI call without 'response_format' parameter...")
+                            await _notify("Provider menolak 'response_format'; menyesuaikan permintaan & mencoba ulang...")
                             body.pop("response_format", None)
                             retry_needed = True
                         elif any(m.get("role") == "system" for m in body.get("messages", [])):
                             logger.info("Retrying AI call with system prompt merged into user prompt...")
+                            await _notify("Menggabungkan system prompt ke user prompt agar kompatibel dengan model...")
                             sys_msgs = [m["content"] for m in body["messages"] if m.get("role") == "system"]
                             user_msgs = [m["content"] for m in body["messages"] if m.get("role") == "user"]
                             body["messages"] = [{"role": "user", "content": "\n\n".join(sys_msgs + user_msgs)}]
@@ -161,12 +174,14 @@ class OpenAICompatibleAdapter(BaseAIAdapter):
                         if attempt < retries:
                             wait_time = backoffs[attempt]
                             logger.warning(f"AI Provider returned HTTP 429 Too Many Requests. Retrying in {wait_time}s...")
+                            await _notify(f"Rate limit AI (HTTP 429). Menunggu {int(wait_time)}s sebelum mencoba ulang...")
                             await asyncio.sleep(wait_time)
                             continue
                         else:
                             resp.raise_for_status()
 
                     resp.raise_for_status()
+                    await _notify("Respons JSON diterima dari LLM; memvalidasi skema pemetaan...")
                     data = resp.json()
 
                     latency_ms = int((time.monotonic() - start_time) * 1000)
@@ -186,6 +201,7 @@ class OpenAICompatibleAdapter(BaseAIAdapter):
 
                 except (httpx.TimeoutException, httpx.ConnectError) as exc:
                     if attempt < retries:
+                        await _notify(f"Koneksi ke endpoint AI gagal/timeout ({type(exc).__name__}), mencoba ulang...")
                         await asyncio.sleep(1.0)
                         continue
                     raise exc
@@ -203,8 +219,14 @@ class MockAIAdapter(BaseAIAdapter):
         self,
         system_prompt: str,
         user_prompt: str,
-        response_schema: Type[T]
+        response_schema: Type[T],
+        status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> Tuple[T, int, int, int]:
+        if status_callback:
+            try:
+                await status_callback("Menganalisis pola header & konteks dengan mesin aturan lokal (mock)...")
+            except Exception:
+                pass
         latency_ms = 15
         prompt_tokens = 120
         completion_tokens = 85
@@ -284,27 +306,27 @@ class MockAIAdapter(BaseAIAdapter):
                 )
                 routes = [
                     {"title": "Paket Pengadaan", "path": "/packages", "description": "Daftar dan buat transaksi pengadaan SD"},
-                    {"title": "Impor Spreadsheet", "path": "/imports", "description": "Unggah berkas Excel dan petakan kolom"}
+                    {"title": "Impor Dokumen", "path": "/imports", "description": "Unggah berkas Excel/PDF/Word dan petakan kolom"}
                 ]
                 questions = [
                     "Bagaimana cara membuat paket pengadaan baru?",
-                    "Apa fungsi menu Impor Spreadsheet?",
+                    "Apa fungsi menu Impor Dokumen?",
                     "Bagaimana alur persetujuan Direktur Keuangan?"
                 ]
-            # 2. Impor Spreadsheet / Upload Excel
-            elif any(w in query for w in ["impor", "import", "excel", "upload", "unggah", "xlsx", "kk09", "pemetaan"]):
+            # 2. Impor Dokumen / Upload Multi-Format
+            elif any(w in query for w in ["impor", "import", "excel", "pdf", "docx", "doc", "word", "upload", "unggah", "xlsx", "kk09", "pemetaan"]):
                 reply = (
-                    "### 📥 Panduan Impor Berkas Spreadsheet Excel\n\n"
-                    "Untuk mengimpor data transaksi pengadaan dari berkas Excel (seperti format referensi `4 PCI KK09.xlsx`):\n\n"
-                    "1. Buka menu **Impor Spreadsheet** pada bilah sisi kiri (rute: `/imports`).\n"
-                    "2. Klik area unggah berkas atau seret berkas `.xlsx` (maksimal 20 MB).\n"
-                    "3. Sistem akan mengaktifkan **Smart Column Mapping AI** untuk menganalisis baris header tabel secara otomatis.\n"
+                    "### 📥 Panduan Impor Dokumen Pengadaan (.xlsx, .pdf, .doc, .docx)\n\n"
+                    "Untuk mengimpor data transaksi pengadaan dari berkas Excel, PDF, atau Word:\n\n"
+                    "1. Buka menu **Impor Dokumen** pada bilah sisi kiri (rute: `/imports`).\n"
+                    "2. Klik area unggah berkas atau seret berkas `.xlsx`, `.pdf`, `.doc`, atau `.docx` (maksimal 20 MB).\n"
+                    "3. Sistem akan mengekstrak tabel & konteks dokumen secara deterministik, lalu menjalankan **Smart Column Mapping AI** sambil menampilkan progres secara real-time.\n"
                     "4. Periksa pratinjau pemetaan kolom (*No*, *Nama Barang*, *Spesifikasi*, *Volume*, *Satuan*, *Harga Satuan*).\n"
                     "5. Klik tombol **'Konfirmasi & Buat Paket'** untuk menyimpan draf paket baru.\n\n"
                     "Paket yang diimpor akan langsung berstatus **DRAFT** dan dapat disunting di Workspace Detail Paket."
                 )
                 routes = [
-                    {"title": "Impor Spreadsheet", "path": "/imports", "description": "Halaman unggah berkas Excel dan pratinjau pemetaan"},
+                    {"title": "Impor Dokumen", "path": "/imports", "description": "Halaman unggah dokumen pengadaan dan pratinjau pemetaan"},
                     {"title": "Paket Pengadaan", "path": "/packages", "description": "Lihat hasil draf paket yang telah diimpor"}
                 ]
                 questions = [
@@ -388,7 +410,7 @@ class MockAIAdapter(BaseAIAdapter):
                     "### 👥 Peran Pengguna & Hak Akses Sistem (RBAC)\n\n"
                     "Sistem membagi wewenang menjadi 4 peran tegas:\n\n"
                     "1. **Staf Administrasi** (`ADMINISTRATION`):\n"
-                    "   Menyusun draf paket, impor spreadsheet, input barang & harga, menjalankan validasi, mengajukan review. *Dilarang menyetujui paket sendiri.*\n"
+                    "   Menyusun draf paket, impor dokumen pengadaan (.xlsx/.pdf/.doc/.docx), input barang & harga, menjalankan validasi, mengajukan review. *Dilarang menyetujui paket sendiri.*\n"
                     "2. **Staf Logistik** (`LOGISTICS`):\n"
                     "   Menginput nomor surat jalan, tanggal tiba riil, verifikasi kondisi fisik barang, dan unggah foto bukti. *Dilarang mengubah harga atau approve.*\n"
                     "3. **Direktur Keuangan** (`FINANCE_DIRECTOR`):\n"
@@ -432,7 +454,7 @@ class MockAIAdapter(BaseAIAdapter):
                     "Saya adalah Asisten Cerdas Pengetahuan Sistem yang siap memandu Anda bernavigasi dan memahami seluruh fitur aplikasi pengadaan **CV Pustaka Cemerlang Indonesia**.\n\n"
                     "**Rute Menu Utama Aplikasi**:\n"
                     "- **Paket Pengadaan** (`/packages`): Halaman utama transaksi pengadaan barang/jasa SD.\n"
-                    "- **Impor Spreadsheet** (`/imports`): Unggah berkas Excel (`.xlsx`) dan pemetaan cerdas AI.\n"
+                    "- **Impor Dokumen** (`/imports`): Unggah dokumen transaksi (`.xlsx`, `.pdf`, `.doc`, `.docx`) dan pemetaan cerdas AI.\n"
                     "- **Pemeriksaan Sistem** (`/packages?tab=inspection`): Cek kepatuhan aturan bisnis (BR01-BR15).\n"
                     "- **Persetujuan Direktur** (`/packages?filter=under_review`): Ruang kerja persetujuan Direktur Keuangan.\n"
                     "- **Master Sekolah** (`/schools`) & **Master Rekanan** (`/companies`): Basis data identitas dan SK pejabat.\n"
@@ -441,7 +463,7 @@ class MockAIAdapter(BaseAIAdapter):
                 )
                 routes = [
                     {"title": "Paket Pengadaan", "path": "/packages", "description": "Daftar transaksi dan buat paket pengadaan baru"},
-                    {"title": "Impor Spreadsheet", "path": "/imports", "description": "Unggah berkas Excel transaksi"},
+                    {"title": "Impor Dokumen", "path": "/imports", "description": "Unggah dokumen transaksi (.xlsx, .pdf, .doc, .docx)"},
                     {"title": "Master Sekolah", "path": "/schools", "description": "Kelola data SD dan SK pejabat"}
                 ]
                 questions = [

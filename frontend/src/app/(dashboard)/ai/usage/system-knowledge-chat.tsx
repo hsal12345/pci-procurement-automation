@@ -94,9 +94,9 @@ export function SystemKnowledgeChatTab({ runtimeConfig }: SystemKnowledgeChatTab
           description: "Pusat transaksi pengadaan barang dan pembuatan draf",
         },
         {
-          title: "Impor Spreadsheet",
+          title: "Impor Dokumen",
           path: "/imports",
-          description: "Unggah berkas Excel dan pratinjau pemetaan kolom",
+          description: "Unggah dokumen (.xlsx, .pdf, .doc, .docx) dan pratinjau pemetaan",
         },
         {
           title: "Master Sekolah",

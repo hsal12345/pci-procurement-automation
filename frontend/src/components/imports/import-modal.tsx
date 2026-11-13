@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileSpreadsheet, X } from "lucide-react";
+import { FileUp, X } from "lucide-react";
 import { ImportWizard } from "@/components/imports/import-wizard";
 import { ImportConfirmResponse } from "@/types/imports";
 
@@ -36,9 +36,9 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
         {/* Header */}
         <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-4 h-4 text-primary" />
+            <FileUp className="w-4 h-4 text-primary" />
             <h3 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
-              Impor Buku Kerja Excel & Konfirmasi Pemetaan AI (.xlsx)
+              Impor Dokumen Pengadaan &amp; Pemetaan AI (.xlsx, .pdf, .doc, .docx)
             </h3>
           </div>
           <button

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileSpreadsheet, Sparkles, Download, Loader2, CheckCircle2 } from "lucide-react";
+import { FileUp, Sparkles, Download, Loader2, CheckCircle2 } from "lucide-react";
 import { ImportWizard } from "@/components/imports/import-wizard";
 import { apiClient } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
@@ -36,9 +36,9 @@ export default function ImportsPage() {
     <div className="p-6 max-w-6xl space-y-6 text-xs font-sans">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
         <div className="flex items-center gap-2">
-          <FileSpreadsheet className="w-5 h-5 text-primary" />
+          <FileUp className="w-5 h-5 text-primary" />
           <h1 className="text-base font-semibold text-foreground">
-            Impor Buku Kerja Spreadsheet Pengadaan & Konfirmasi Pemetaan AI (FR02 / SD-02)
+            Impor Dokumen Pengadaan &amp; Konfirmasi Pemetaan AI (FR02 / SD-02)
           </h1>
         </div>
         <button
@@ -61,7 +61,7 @@ export default function ImportsPage() {
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>Alur Unggah Excel, Pemetaan AI, & Konfirmasi Draf</span>
+            <span>Alur Unggah (.xlsx, .pdf, .doc, .docx), Ekstraksi Konteks, &amp; Pemetaan AI</span>
           </h2>
           <span className="text-[11px] font-mono text-muted-foreground">
             Human-in-the-Loop + Fallback Manual

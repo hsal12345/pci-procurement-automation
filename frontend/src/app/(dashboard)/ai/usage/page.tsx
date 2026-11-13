@@ -1034,7 +1034,7 @@ export default function AIUsageDashboard() {
             ) : (
               <div className="space-y-3">
                 <label className="font-semibold text-foreground">
-                  Daftar Nama Kolom Header Spreadsheet (Pisahkan dengan koma)
+                  Daftar Nama Kolom Header Tabel (Pisahkan dengan koma)
                 </label>
                 <input
                   type="text"

@@ -10,6 +10,12 @@ import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils.exceptions import InvalidFileException
 
+from app.services.extractors.base import (
+    build_default_events_for_period,
+    extract_school_header_from_lines,
+    extract_transaction_metadata_from_lines,
+)
+
 EXTERNAL_LINK_REGEX = re.compile(r"(\[\d+\]|\.xlsx?!|#REF!|#VALUE!|#NAME\?)", re.IGNORECASE)
 
 TABLE_HEADER_TOKENS = {
@@ -374,9 +380,20 @@ class ExcelImportService:
                 expected_line_count=len(candidate_lines)
             )
 
-            events_candidate = self._extract_candidate_events(wb_data)
+            events_candidate = self._extract_candidate_events(
+                wb_data,
+                fiscal_year=int(transaction_metadata.get("tahun_anggaran") or 2026),
+                quarter=int(transaction_metadata.get("triwulan") or 2),
+            )
+
+            context_snippets: List[str] = []
+            for r_vals in raw_preview_rows[:18]:
+                line_txt = " | ".join(str(c).strip() for c in r_vals if c is not None and str(c).strip())
+                if line_txt:
+                    context_snippets.append(line_txt)
 
             return {
+                "source_format": "XLSX",
                 "school_candidate": school_candidate,
                 "transaction_metadata": transaction_metadata,
                 "candidate_lines": candidate_lines,
@@ -388,6 +405,19 @@ class ExcelImportService:
                 "raw_preview_rows": raw_preview_rows,
                 "detected_discrepancies": discrepancies,
                 "can_proceed_to_confirm": len(candidate_lines) > 0,
+                "document_context": {
+                    "source_format": "XLSX",
+                    "snippets": context_snippets,
+                    "section_contexts": {primary_sheet_name: context_snippets[:10]},
+                },
+                "extraction_stats": {
+                    "source_format": "XLSX",
+                    "sections_count": len(sheet_names),
+                    "active_section": primary_sheet_name,
+                    "preview_rows_count": len(raw_preview_rows),
+                    "candidate_lines_count": len(candidate_lines),
+                    "context_lines_count": len(context_snippets),
+                },
             }
         finally:
             try:
@@ -399,80 +429,32 @@ class ExcelImportService:
             except Exception:
                 pass
 
+    @staticmethod
+    def _worksheet_to_header_lines(ws, max_rows: int = 20, max_cols: int = 12) -> List[str]:
+        """Flattens worksheet header rows into clean lines and adjacent key-value pairs."""
+        lines: List[str] = []
+        for r in range(1, min(ws.max_row + 1, max_rows + 1)):
+            row_vals: List[str] = []
+            for c in range(1, min(ws.max_column + 1, max_cols + 1)):
+                raw = ws.cell(row=r, column=c).value
+                if raw is None:
+                    continue
+                txt = str(raw).strip()
+                if txt and txt not in (":", "-"):
+                    row_vals.append(txt)
+            if row_vals:
+                lines.append(" ".join(row_vals))
+        return lines
+
     def _extract_school_header(self, ws) -> Dict[str, Any]:
-        """Extracts candidate school info by structurally examining header rows 1..7."""
-        name = None
-        address = None
-        email = None
-
-        for r in range(1, min(ws.max_row + 1, 8)):
-            for c in range(1, min(ws.max_column + 1, 10)):
-                val = str(ws.cell(row=r, column=c).value or "").strip()
-                val_upper = val.upper()
-                if not name and any(
-                    kw in val_upper
-                    for kw in ("SEKOLAH DASAR", "SDN", "SD NEGERI", "SMP", "SMA", "SMK", "MADRASAH")
-                ):
-                    name = val
-                if not address and ("JL." in val_upper or "JALAN" in val_upper):
-                    address = val
-                if not email and ("EMAIL" in val_upper or "@" in val):
-                    # extract email
-                    match = re.search(r"[\w\.-]+@[\w\.-]+", val)
-                    if match:
-                        email = match.group(0)
-
-        return {
-            "name": name or "SEKOLAH DASAR NEGERI KEBON KOSONG 09",
-            "address": address or "Jl. Kemayoran Gempol no.32",
-            "email": email or "sdnkk05pg@gmail.com",
-            "level": "SD",
-        }
+        """Extracts candidate school info by structurally examining header rows 1..12."""
+        lines = self._worksheet_to_header_lines(ws, max_rows=12, max_cols=10)
+        return extract_school_header_from_lines(lines)
 
     def _extract_transaction_metadata(self, ws) -> Dict[str, Any]:
-        """Extracts transaction metadata by finding label anchors:
-        Kegiatan:, Rincian Kegiatan:, Kode Rekening:, Tahun Anggaran:
-        """
-        meta = {
-            "kegiatan": "Pemeliharaan Sarana dan Prasarana Sekolah",
-            "rincian_kegiatan": "Pembelian Bahan Kebersihan Sekolah",
-            "kode_rekening": "Bahan-bahan lainnya",
-            "tahun_anggaran": 2026,
-        }
-
-        for r in range(1, min(ws.max_row + 1, 20)):
-            for c in range(1, min(ws.max_column + 1, 10)):
-                cell_val = str(ws.cell(row=r, column=c).value or "").strip().lower()
-                
-                # Check for value in adjacent cells
-                def get_next_val():
-                    for next_col in range(c + 1, min(c + 5, ws.max_column + 1)):
-                        val = ws.cell(row=r, column=next_col).value
-                        if val is not None and str(val).strip() not in [":", "-"]:
-                            return val
-                    return None
-
-                if "kegiatan" in cell_val and "rincian" not in cell_val:
-                    val = get_next_val()
-                    if val:
-                        meta["kegiatan"] = str(val).strip()
-                elif "rincian kegiatan" in cell_val:
-                    val = get_next_val()
-                    if val:
-                        meta["rincian_kegiatan"] = str(val).strip()
-                elif "kode rekening" in cell_val:
-                    val = get_next_val()
-                    if val:
-                        meta["kode_rekening"] = str(val).strip()
-                elif "tahun anggaran" in cell_val or "tahung anggaran" in cell_val:
-                    val = get_next_val()
-                    if val:
-                        try:
-                            meta["tahun_anggaran"] = int(str(val).strip())
-                        except ValueError:
-                            pass
-
-        return meta
+        """Extracts transaction metadata (Kegiatan, Rincian, Kode Rekening, Tahun Anggaran, Triwulan)."""
+        lines = self._worksheet_to_header_lines(ws, max_rows=22, max_cols=12)
+        return extract_transaction_metadata_from_lines(lines)
 
     def _extract_line_items(
         self,
@@ -846,20 +828,35 @@ class ExcelImportService:
 
         return discrepancies
 
-    def _extract_candidate_events(self, wb_data) -> List[Dict[str, Any]]:
-        """Extracts candidate dates from sheets for event synchronization."""
-        events = [
-            {"event_code": "HPS", "event_date": "2026-06-02", "day_name_id": "Selasa"},
-            {"event_code": "SPP", "event_date": "2026-06-02", "day_name_id": "Selasa"},
-            {"event_code": "PENAWARAN", "event_date": "2026-06-05", "day_name_id": "Jumat"},
-            {"event_code": "NEGOSIASI", "event_date": "2026-06-10", "day_name_id": "Rabu"},
-            {"event_code": "PESANAN", "event_date": "2026-06-12", "day_name_id": "Jumat"},
-            {"event_code": "SURAT_JALAN", "event_date": "2026-06-16", "day_name_id": "Selasa"},
-            {"event_code": "BAPB", "event_date": "2026-06-16", "day_name_id": "Selasa"},
-            {"event_code": "BAST", "event_date": "2026-06-16", "day_name_id": "Selasa"},
-            {"event_code": "BAST_REKANAN", "event_date": "2026-06-16", "day_name_id": "Selasa"},
-            {"event_code": "BAPP", "event_date": "2026-06-16", "day_name_id": "Selasa"},
-            {"event_code": "FAKTUR", "event_date": "2026-06-16", "day_name_id": "Selasa"},
-            {"event_code": "KWITANSI", "event_date": "2026-06-16", "day_name_id": "Selasa"},
-        ]
-        return events
+    def _extract_candidate_events(
+        self,
+        wb_data,
+        fiscal_year: int = 2026,
+        quarter: int = 2,
+    ) -> List[Dict[str, Any]]:
+        """Extracts candidate dates aligned with the detected fiscal_year and quarter."""
+        return build_default_events_for_period(fiscal_year=fiscal_year, quarter=quarter)
+
+    def validate_document_integrity(self, file_path: Path) -> str:
+        """Validates integrity across .xlsx, .pdf, .docx, and .doc before invoking AI."""
+        from app.services.extractors import DocumentExtractorRouter
+
+        return DocumentExtractorRouter.validate_integrity(file_path, excel_service=self)
+
+    def parse_document(
+        self,
+        file_path: Path,
+        column_mapping: Optional[Dict[str, int]] = None,
+        sheet_name: Optional[str] = None,
+        header_row_index: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Parses any supported procurement document (.xlsx, .pdf, .docx, .doc) into unified candidate payload."""
+        from app.services.extractors import DocumentExtractorRouter
+
+        return DocumentExtractorRouter.parse_document(
+            file_path,
+            excel_service=self,
+            column_mapping=column_mapping,
+            section_name=sheet_name,
+            header_row_index=header_row_index,
+        )

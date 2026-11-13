@@ -42,9 +42,9 @@ export default function manifest(): MetadataRoute.Manifest {
         icons: [{ src: "/images/icon-192.png", sizes: "192x192" }],
       },
       {
-        name: "Impor Spreadsheet",
+        name: "Impor Dokumen",
         short_name: "Impor",
-        description: "Unggah berkas Excel pengadaan",
+        description: "Unggah dokumen pengadaan (.xlsx, .pdf, .doc, .docx)",
         url: "/imports",
         icons: [{ src: "/images/icon-192.png", sizes: "192x192" }],
       },

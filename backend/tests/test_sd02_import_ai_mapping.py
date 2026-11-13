@@ -239,12 +239,19 @@ async def test_sd02_2a_rejects_corrupt_or_non_xlsx_before_ai(tmp_path: Path):
             )
         assert res_corrupt.status_code == 422
 
-        res_pdf = await client.post(
+        res_txt = await client.post(
+            "/api/v1/imports/upload",
+            headers=headers,
+            files={"file": ("catatan.txt", b"teks biasa", "text/plain")},
+        )
+        assert res_txt.status_code == 400
+
+        res_bad_pdf = await client.post(
             "/api/v1/imports/upload",
             headers=headers,
             files={"file": ("dokumen.pdf", b"%PDF-1.4", "application/pdf")},
         )
-        assert res_pdf.status_code == 400
+        assert res_bad_pdf.status_code == 422
 
     async with AsyncSessionLocal() as db:
         ai_logs = (await db.execute(select(AIUsageLog))).scalars().all()

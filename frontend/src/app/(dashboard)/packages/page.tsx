@@ -13,7 +13,7 @@ import {
   ArrowUpRight,
   RefreshCw,
   AlertCircle,
-  FileSpreadsheet,
+  FileUp,
   CheckSquare,
   Archive,
   ShieldCheck,
@@ -142,8 +142,8 @@ function PackagesListPage() {
             onClick={() => setIsImportOpen(true)}
             className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-card hover:bg-muted text-foreground transition"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Impor Spreadsheet</span>
+            <FileUp className="w-3.5 h-3.5" />
+            <span>Impor Dokumen</span>
           </button>
           <button
             type="button"
@@ -287,7 +287,7 @@ function PackagesListPage() {
                 onClick={() => setIsImportOpen(true)}
                 className="px-2.5 py-1 rounded border border-border bg-card hover:bg-muted text-foreground transition"
               >
-                Impor Spreadsheet
+                Impor Dokumen
               </button>
             </div>
           </div>

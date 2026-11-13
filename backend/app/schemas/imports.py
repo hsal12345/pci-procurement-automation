@@ -11,8 +11,10 @@ class ImportUploadResponse(BaseSchema):
     file_hash: str
     file_size: int = 0
     status: str
+    source_format: str = "XLSX"
     sheet_names: List[str] = []
     active_sheet: Optional[str] = None
+    extraction_stats: Dict[str, Any] = Field(default_factory=dict)
     message: str
 
 
@@ -31,6 +33,7 @@ class ImportPreviewResponse(BaseSchema):
     filename: str
     file_hash: Optional[str] = None
     status: str
+    source_format: str = "XLSX"
     sheet_names: List[str] = []
     active_sheet: str = "HPS"
     raw_preview_rows: List[List[Any]] = []
@@ -40,6 +43,9 @@ class ImportPreviewResponse(BaseSchema):
     ai_status: Optional[str] = None
     ai_error: Optional[str] = None
     upload_context: Dict[str, Any] = {}
+    document_context: Dict[str, Any] = Field(default_factory=dict)
+    extraction_stats: Dict[str, Any] = Field(default_factory=dict)
+    progress: Optional[Dict[str, Any]] = None
     school_candidate: Dict[str, Any]
     transaction_metadata: Dict[str, Any]
     candidate_lines: List[Dict[str, Any]]

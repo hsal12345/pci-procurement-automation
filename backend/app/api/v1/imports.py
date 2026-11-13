@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 from app.api.deps import get_current_actor_name, get_current_user_role
@@ -21,7 +21,10 @@ from app.schemas.imports import (
     ImportUploadResponse,
 )
 from app.services.audit_service import audit_service
+from app.services.import_progress import import_progress_tracker
 from app.services.import_service import ExcelImportService
+from app.services.extractors import SUPPORTED_EXTENSIONS
+from app.services.extractors.base import build_default_events_for_period, match_school_record
 from app.core.terbilang import terbilang
 
 router = APIRouter(prefix="/imports", tags=["Imports"])
@@ -47,18 +50,20 @@ def _resolve_workbook_path(rec: ImportRecord) -> Path:
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="Berkas fisik spreadsheet tidak ditemukan di penyimpanan server.",
+        detail="Berkas fisik dokumen impor tidak ditemukan di penyimpanan server.",
     )
 
 
 def _build_preview_response(rec: ImportRecord) -> ImportPreviewResponse:
     payload = rec.candidate_payload or {}
     meta = rec.sheet_metadata or {}
+    source_format = meta.get("source_format") or payload.get("source_format") or "XLSX"
     return ImportPreviewResponse(
         import_id=rec.id,
         filename=rec.original_filename,
         file_hash=rec.file_hash,
         status=rec.status,
+        source_format=source_format,
         sheet_names=meta.get("sheet_names") or payload.get("sheet_names", []),
         active_sheet=meta.get("active_sheet") or payload.get("active_sheet", "HPS"),
         raw_preview_rows=payload.get("raw_preview_rows", []),
@@ -68,6 +73,9 @@ def _build_preview_response(rec: ImportRecord) -> ImportPreviewResponse:
         ai_status=meta.get("ai_status"),
         ai_error=meta.get("ai_error"),
         upload_context=meta.get("upload_context", {}),
+        document_context=payload.get("document_context", {}),
+        extraction_stats=payload.get("extraction_stats", {}),
+        progress=import_progress_tracker.get_state(str(rec.id), fallback_meta=meta),
         school_candidate=payload.get("school_candidate", {}),
         transaction_metadata=payload.get("transaction_metadata", {}),
         candidate_lines=payload.get("candidate_lines", []),
@@ -102,27 +110,26 @@ async def upload_excel_import(
     role: str = Depends(get_current_user_role),
     actor_name: str = Depends(get_current_actor_name),
 ):
-    """Uploads an .xlsx workbook, validates file structure & integrity before AI invocation,
-    securely parses structural content, and stores candidate JSON with detected discrepancies
-    (SD-02 Step 1-2 / UC-02 2a).
+    """Uploads an .xlsx, .pdf, .docx, or .doc document, validates structure & integrity before AI invocation,
+    deterministically extracts tables & contextual metadata, and stores candidate JSON (SD-02 Step 1-2 / UC-02 2a).
     """
     if role not in ("ADMINISTRATION", "SYSTEM_ADMINISTRATOR"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Akses ditolak: Hanya staf Administrasi atau Administrator Sistem yang dapat mengimpor spreadsheet.",
+            detail="Akses ditolak: Hanya staf Administrasi atau Administrator Sistem yang dapat mengimpor dokumen pengadaan.",
         )
 
     filename = Path(file.filename or "upload.xlsx").name
-    lower_name = filename.lower()
-    if lower_name.endswith(".xls") and not lower_name.endswith(".xlsx"):
+    ext = Path(filename).suffix.lower()
+    if ext == ".xls":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Format lama .xls tidak didukung langsung. Silakan simpan ulang sebagai .xlsx terlebih dahulu.",
         )
-    if not lower_name.endswith(".xlsx"):
+    if ext not in SUPPORTED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Hanya file berekstensi .xlsx yang didukung untuk impor berkas pengadaan.",
+            detail="Format berkas tidak didukung. Gunakan file berekstensi .xlsx, .pdf, .doc, atau .docx.",
         )
 
     stored_filename = f"{uuid4()}_{filename}"
@@ -132,25 +139,25 @@ async def upload_excel_import(
 
     # Validate structural integrity BEFORE calling AI or persisting ImportRecord
     try:
-        import_service.validate_workbook_integrity(temp_path)
+        source_format = import_service.validate_document_integrity(temp_path)
     except Exception as exc:
         temp_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Berkas Excel tidak valid atau rusak: {exc}",
+            detail=f"Berkas dokumen tidak valid atau rusak: {exc}",
         )
 
     file_hash = import_service.compute_sha256(temp_path)
     file_size = temp_path.stat().st_size
 
-    # Parse structural workbook
+    # Deterministically extract tables, grids, school context, and transaction metadata before LLM
     try:
-        parsed_result = import_service.parse_workbook(temp_path, sheet_name=sheet_name)
+        parsed_result = import_service.parse_document(temp_path, sheet_name=sheet_name)
     except Exception as e:
         temp_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Gagal memproses struktur berkas Excel: {str(e)}",
+            detail=f"Gagal mengekstrak struktur dan konteks dokumen ({source_format}): {str(e)}",
         )
 
     upload_context = {
@@ -160,13 +167,29 @@ async def upload_excel_import(
         "funding_source_code": fund_source or "BOS_REGULER",
     }
 
+    cand_school = parsed_result.get("school_candidate") or {}
+    if not school_id and cand_school.get("detected"):
+        res_all_schools = await db.execute(select(School).where(School.is_active == True))
+        matched_school = match_school_record(
+            res_all_schools.scalars().all(),
+            candidate_name=cand_school.get("name"),
+            npsn=cand_school.get("npsn"),
+        )
+        if matched_school:
+            cand_school["matched_school_id"] = str(matched_school.id)
+            cand_school["matched_school_name"] = matched_school.name
+            parsed_result["school_candidate"] = cand_school
+
+    extraction_stats = parsed_result.get("extraction_stats", {})
     sheet_meta = {
         "stored_filename": stored_filename,
+        "source_format": source_format,
         "sheet_names": parsed_result["sheet_names"],
         "active_sheet": parsed_result["active_sheet"],
         "header_row_index": parsed_result.get("header_row_index"),
         "detected_mapping": parsed_result.get("detected_mapping", {}),
         "upload_context": upload_context,
+        "extraction_stats": extraction_stats,
     }
 
     # Store import record in database
@@ -183,20 +206,38 @@ async def upload_excel_import(
     db.add(import_record)
     await db.flush()
 
+    progress_state = import_progress_tracker.emit(
+        str(import_record.id),
+        stage="EXTRACT_VALIDATE",
+        percent=42,
+        detail=(
+            f"Ekstraksi {source_format} selesai: {len(parsed_result['sheet_names'])} bagian/tabel "
+            f"& {len(parsed_result.get('candidate_lines', []))} baris awal ditemukan."
+        ),
+        status="RUNNING",
+        source_format=source_format,
+        extracted_stats=extraction_stats,
+    )
+    sheet_meta["progress"] = progress_state
+    import_record.sheet_metadata = dict(sheet_meta)
+
+    audit_action = "UPLOAD_EXCEL" if source_format == "XLSX" else "UPLOAD_DOCUMENT"
     await audit_service.log_event(
         db=db,
         entity_name="ImportRecord",
         entity_id=str(import_record.id),
-        action="UPLOAD_EXCEL",
+        action=audit_action,
         actor=actor_name,
         after_state={
             "filename": filename,
+            "source_format": source_format,
             "file_hash": file_hash,
             "file_size": file_size,
             "active_sheet": parsed_result["active_sheet"],
             "candidate_lines_count": len(parsed_result.get("candidate_lines", [])),
+            "extraction_stats": extraction_stats,
         },
-        reason="Berkas Excel berhasil diunggah dan lolos pemeriksaan struktur awal.",
+        reason=f"Berkas {source_format} berhasil diunggah, diekstrak deterministik, dan lolos pemeriksaan integritas.",
     )
 
     await db.commit()
@@ -208,9 +249,40 @@ async def upload_excel_import(
         file_hash=import_record.file_hash,
         file_size=import_record.file_size,
         status=import_record.status,
+        source_format=source_format,
         sheet_names=parsed_result["sheet_names"],
         active_sheet=parsed_result["active_sheet"],
-        message="Berkas berhasil diunggah dan diuraikan. Lanjutkan peninjauan pemetaan AI sebelum konfirmasi.",
+        extraction_stats=extraction_stats,
+        message=f"Berkas {source_format} berhasil diunggah & diekstrak. Melanjutkan pemetaan konteks oleh AI.",
+    )
+
+
+@router.get("/{id}/progress")
+async def get_import_progress(id: UUID, db: AsyncSession = Depends(get_db)):
+    """Returns latest deterministic extraction & AI mapping progress snapshot for an import."""
+    result = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
+    rec = result.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Data impor dokumen tidak ditemukan.")
+    return import_progress_tracker.get_state(str(id), fallback_meta=rec.sheet_metadata)
+
+
+@router.get("/{id}/progress/stream")
+async def stream_import_progress(id: UUID, db: AsyncSession = Depends(get_db)):
+    """Streams real-time extraction & AI mapping progress events via Server-Sent Events (SSE)."""
+    result = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
+    rec = result.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Data impor dokumen tidak ditemukan.")
+
+    return StreamingResponse(
+        import_progress_tracker.subscribe_sse(str(id), fallback_meta=rec.sheet_metadata),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -251,7 +323,7 @@ async def reparse_import_with_mapping(
 
     workbook_path = _resolve_workbook_path(rec)
     try:
-        parsed_result = import_service.parse_workbook(
+        parsed_result = import_service.parse_document(
             workbook_path,
             column_mapping=request.column_mapping or None,
             sheet_name=request.sheet_name,
@@ -260,7 +332,7 @@ async def reparse_import_with_mapping(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Gagal menerapkan pemetaan kolom ke berkas Excel: {exc}",
+            detail=f"Gagal menerapkan pemetaan kolom ke dokumen impor: {exc}",
         )
 
     updated_meta = dict(rec.sheet_metadata or {})
@@ -329,7 +401,7 @@ async def confirm_import_and_create_package(
         request.column_mapping or request.sheet_name or request.header_row_index
     ):
         workbook_path = _resolve_workbook_path(rec)
-        payload = import_service.parse_workbook(
+        payload = import_service.parse_document(
             workbook_path,
             column_mapping=request.column_mapping,
             sheet_name=request.sheet_name or sheet_meta.get("active_sheet"),
@@ -349,13 +421,29 @@ async def confirm_import_and_create_package(
         )
 
     meta = payload.get("transaction_metadata", {})
-    fiscal_year = request.fiscal_year or upload_ctx.get("fiscal_year") or meta.get("tahun_anggaran") or 2026
-    quarter = request.quarter or upload_ctx.get("quarter") or 2
+    ai_prop = sheet_meta.get("ai_mapping_proposal") or {}
+    ai_year = ai_prop.get("detected_fiscal_year")
+    ai_quarter = ai_prop.get("detected_quarter")
+
+    fiscal_year = (
+        request.fiscal_year
+        or upload_ctx.get("fiscal_year")
+        or (int(ai_year) if ai_year else None)
+        or (int(meta["tahun_anggaran"]) if meta.get("tahun_anggaran") else None)
+        or 2026
+    )
+    quarter = (
+        request.quarter
+        or upload_ctx.get("quarter")
+        or (int(ai_quarter) if ai_quarter else None)
+        or (int(meta["triwulan"]) if meta.get("triwulan") else None)
+        or 2
+    )
     if quarter < 1 or quarter > 4:
         quarter = 2
     funding_code = request.funding_source_code or upload_ctx.get("funding_source_code") or "BOS_REGULER"
 
-    # 1. Resolve or create School
+    # 1. Resolve or create School (normalized master lookup avoids duplicates across SDN / SD NEGERI / PAGI)
     raw_school_id = request.school_id or upload_ctx.get("school_id")
     resolved_school_uuid: Optional[UUID] = None
     if raw_school_id:
@@ -366,12 +454,33 @@ async def confirm_import_and_create_package(
 
     if not resolved_school_uuid:
         cand_school = payload.get("school_candidate", {})
-        cand_name = cand_school.get("name", "SEKOLAH DASAR NEGERI KEBON KOSONG 09")
-        res_school = await db.execute(select(School).where(School.name == cand_name))
-        school = res_school.scalars().first()
+        cand_name = str(cand_school.get("name") or "SEKOLAH DASAR NEGERI KEBON KOSONG 09").strip()
+        cand_npsn = cand_school.get("npsn")
+        ai_school_name = str(ai_prop.get("detected_school_name") or "").strip() or None
+
+        res_schools = await db.execute(select(School))
+        all_schools = res_schools.scalars().all()
+
+        # Prefer document-extracted school if detected; also consider AI-detected school name
+        primary_lookup = cand_name if cand_school.get("detected", True) else (ai_school_name or cand_name)
+        school = match_school_record(
+            all_schools,
+            candidate_name=primary_lookup,
+            npsn=cand_npsn,
+        )
+        if not school and ai_school_name and ai_school_name != primary_lookup:
+            school = match_school_record(
+                all_schools,
+                candidate_name=ai_school_name,
+                npsn=cand_npsn,
+            )
+        if not school and ai_school_name and not cand_school.get("detected"):
+            cand_name = ai_school_name
+
         if not school:
             school = School(
                 name=cand_name,
+                npsn=cand_npsn,
                 address=cand_school.get("address", "Jl. Kemayoran Gempol no.32"),
                 email=cand_school.get("email", "sdnkk05pg@gmail.com"),
                 level="SD",
@@ -652,8 +761,29 @@ async def confirm_import_and_create_package(
     revision.grand_total = grand_total
     revision.terbilang_grand_total = terbilang(grand_total)
 
-    # 7. Create Document Events
-    events_data = request.confirmed_events or payload.get("events_candidate", [])
+    # 7. Create Document Events aligned with confirmed fiscal_year & quarter
+    if request.confirmed_events:
+        events_data = request.confirmed_events
+    else:
+        cand_events = payload.get("events_candidate", [])
+        cand_years = set()
+        for ev in cand_events:
+            raw_dt = ev.get("event_date")
+            if raw_dt:
+                try:
+                    cand_years.add(date.fromisoformat(str(raw_dt)).year)
+                except ValueError:
+                    pass
+        if (
+            not cand_events
+            or cand_years != {fiscal_year}
+            or meta.get("tahun_anggaran") != fiscal_year
+            or meta.get("triwulan") != quarter
+        ):
+            events_data = build_default_events_for_period(fiscal_year=fiscal_year, quarter=quarter)
+        else:
+            events_data = cand_events
+
     for ev in events_data:
         doc_event = DocumentEvent(
             revision_id=revision.id,
@@ -700,6 +830,10 @@ async def confirm_import_and_create_package(
         "file_hash": rec.file_hash,
         "package_id": str(package.id),
         "package_number": package.package_number,
+        "school_id": str(school.id),
+        "school_name": school.name,
+        "fiscal_year": package.fiscal_year,
+        "quarter": package.quarter,
         "revision_id": str(revision.id),
         "school_id": str(school.id),
         "school_name": school.name,
@@ -745,6 +879,10 @@ async def confirm_import_and_create_package(
         "file_hash": rec.file_hash,
         "package_id": str(package.id),
         "package_number": package.package_number,
+        "school_id": str(school.id),
+        "school_name": school.name,
+        "fiscal_year": package.fiscal_year,
+        "quarter": package.quarter,
         "revision_id": str(revision.id),
         "revision_number": revision.revision_number,
         "mapping_source": mapping_source,

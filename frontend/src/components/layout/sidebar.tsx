@@ -13,7 +13,7 @@ import {
 import { UserRole } from "@/types/package";
 import {
   FolderKanban,
-  FileSpreadsheet,
+  FileUp,
   CheckSquare,
   ShieldCheck,
   Archive,
@@ -141,9 +141,9 @@ export function Sidebar() {
       roles: ["ADMINISTRATION", "FINANCE_DIRECTOR", "SYSTEM_ADMINISTRATOR"],
     },
     {
-      name: "Impor Spreadsheet",
+      name: "Impor Dokumen",
       href: "/imports",
-      icon: FileSpreadsheet,
+      icon: FileUp,
       roles: ["ADMINISTRATION", "SYSTEM_ADMINISTRATOR"],
     },
     {

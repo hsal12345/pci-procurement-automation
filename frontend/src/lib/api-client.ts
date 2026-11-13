@@ -23,6 +23,7 @@ import {
 import {
   ImportUploadResponse,
   ImportPreviewResponse,
+  ImportProgressState,
   ImportReparseRequest,
   ImportConfirmRequest,
   ImportConfirmResponse,
@@ -428,6 +429,187 @@ export const apiClient = {
     request<CandidateMappingProposal>(`/api/v1/ai/imports/${importId}/suggest-mapping`, {
       method: "POST",
       body: JSON.stringify(sheetName ? { sheet_name: sheetName } : {}),
+    }),
+
+  suggestAIMappingAsync: (importId: string, sheetName?: string) =>
+    request<{
+      import_id: string;
+      status: string;
+      sheet_name?: string;
+      provider?: string;
+      model?: string;
+      runtime_mode?: string;
+      progress: ImportProgressState;
+    }>(`/api/v1/ai/imports/${importId}/suggest-mapping-async`, {
+      method: "POST",
+      body: JSON.stringify(sheetName ? { sheet_name: sheetName } : {}),
+    }),
+
+  getImportProgress: (importId: string) =>
+    request<ImportProgressState>(`/api/v1/imports/${importId}/progress`),
+
+  subscribeImportProgress: (
+    importId: string,
+    onProgress: (state: ImportProgressState) => void,
+    onDone?: (finalState: ImportProgressState) => void,
+    onError?: (err: Error) => void
+  ): (() => void) => {
+    const controller = new AbortController();
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let finished = false;
+    const terminalStatuses = new Set(["COMPLETED", "AMBIGUOUS", "FALLBACK", "FAILED"]);
+
+    const finish = (state: ImportProgressState) => {
+      if (finished) return;
+      finished = true;
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      controller.abort();
+      onDone?.(state);
+    };
+
+    const handleState = (state: ImportProgressState) => {
+      onProgress(state);
+      if (terminalStatuses.has(state.status)) {
+        finish(state);
+      }
+    };
+
+    const startFallbackPolling = () => {
+      if (finished || pollTimer) return;
+      pollTimer = setInterval(async () => {
+        if (finished) return;
+        try {
+          const snap = await apiClient.getImportProgress(importId);
+          handleState(snap);
+        } catch (err: any) {
+          if (!finished && onError) {
+            onError(err instanceof Error ? err : new Error(String(err)));
+          }
+        }
+      }, 750);
+    };
+
+    const headers: Record<string, string> = {
+      Accept: "text/event-stream",
+      "X-User-Role": getCurrentRole(),
+      "X-Actor-Name": getCurrentActorName(),
+    };
+    const token = getAuthToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/imports/${importId}/progress/stream`, {
+          method: "GET",
+          headers,
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) {
+          startFallbackPolling();
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+
+        while (!finished) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() || "";
+
+          for (const frame of frames) {
+            const lines = frame.split("\n");
+            let eventType = "message";
+            const dataLines: string[] = [];
+            for (const line of lines) {
+              if (line.startsWith("event:")) {
+                eventType = line.slice(6).trim();
+              } else if (line.startsWith("data:")) {
+                dataLines.push(line.slice(5).trim());
+              }
+            }
+            if (eventType === "progress" && dataLines.length > 0) {
+              try {
+                const parsed = JSON.parse(dataLines.join("\n")) as ImportProgressState;
+                handleState(parsed);
+              } catch {
+                // Ignore malformed SSE chunk
+              }
+            }
+          }
+        }
+        if (!finished) {
+          startFallbackPolling();
+        }
+      } catch {
+        if (!finished && !controller.signal.aborted) {
+          startFallbackPolling();
+        }
+      }
+    })();
+
+    return () => {
+      finished = true;
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      controller.abort();
+    };
+  },
+
+  uploadImportDocumentWithProgress: (
+    formData: FormData,
+    onUploadPercent?: (percent: number) => void
+  ): Promise<ImportUploadResponse> =>
+    new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${API_BASE}/api/v1/imports/upload`);
+      const token = getAuthToken();
+      if (token) {
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      }
+      xhr.setRequestHeader("X-User-Role", getCurrentRole());
+      xhr.setRequestHeader("X-Actor-Name", getCurrentActorName());
+
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable && onUploadPercent) {
+          const pct = Math.min(100, Math.round((ev.loaded / ev.total) * 100));
+          onUploadPercent(pct);
+        }
+      };
+
+      xhr.onload = () => {
+        let data: any = {};
+        try {
+          data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+        } catch {
+          data = {};
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onUploadPercent?.(100);
+          resolve(data as ImportUploadResponse);
+        } else {
+          const msg =
+            typeof data?.detail === "string"
+              ? data.detail
+              : data?.detail?.message || data?.message || `Request failed (${xhr.status})`;
+          reject(new ApiError(xhr.status, msg, data?.detail));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new ApiError(0, "Koneksi jaringan terputus saat mengunggah dokumen."));
+      };
+
+      xhr.send(formData);
     }),
 
   uploadImportExcel: (formData: FormData) =>

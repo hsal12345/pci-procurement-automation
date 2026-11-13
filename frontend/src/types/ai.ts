@@ -86,6 +86,9 @@ export interface CandidateMappingProposal {
   confidence_score: number;
   reasoning?: string;
   is_ambiguous: boolean;
+  detected_school_name?: string | null;
+  detected_fiscal_year?: number | null;
+  detected_quarter?: number | null;
 }
 
 export interface AIUsageResponse {

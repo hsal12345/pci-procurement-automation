@@ -14,6 +14,9 @@ class CandidateMappingProposal(BaseModel):
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Confidence score between 0.0 and 1.0.")
     reasoning: str = Field(..., description="Detailed rationale explaining why this header and column mapping was inferred.")
     is_ambiguous: bool = Field(False, description="Flagged true if confidence_score < 0.80, requiring mandatory manual review.")
+    detected_school_name: Optional[str] = Field(None, description="Optional school name identified from document header/context.")
+    detected_fiscal_year: Optional[int] = Field(None, ge=2000, le=2100, description="Optional fiscal year (Tahun Anggaran) identified from document context.")
+    detected_quarter: Optional[int] = Field(None, ge=1, le=4, description="Optional fiscal quarter (Triwulan 1..4) identified from document context.")
 
 
 class AIMappingSuggestRequest(BaseModel):
