@@ -46,27 +46,29 @@ class AIMappingAssistant:
             return None, "FAILED", f"Berkas Excel tidak ditemukan pada path: {workbook_path}"
 
         wb = openpyxl.load_workbook(workbook_path, data_only=True, read_only=True)
-        target_sheet = sheet_name if (sheet_name and sheet_name in wb.sheetnames) else wb.sheetnames[0]
-        ws = wb[target_sheet]
+        try:
+            target_sheet = sheet_name if (sheet_name and sheet_name in wb.sheetnames) else (
+                "HPS" if "HPS" in wb.sheetnames else wb.sheetnames[0]
+            )
+            ws = wb[target_sheet]
 
-        # Extract top 15 rows
-        extracted_cells = []
-        max_rows = min(15, ws.max_row or 15)
-        max_cols = min(15, ws.max_column or 15)
-
-        for r in range(1, max_rows + 1):
-            for c in range(1, max_cols + 1):
-                raw_val = ws.cell(row=r, column=c).value
-                if raw_val is not None and str(raw_val).strip():
-                    # 1. Sanitize PII
-                    clean_text, _ = PIISanitizer.sanitize_text(str(raw_val))
-                    # 2. Escape XML entities to prevent prompt injection (AT16)
-                    safe_text = PIISanitizer.safe_cell_content(clean_text)
-                    extracted_cells.append(
-                        f'<cell_data sheet="{target_sheet}" row="{r}" col="{c}">{safe_text}</cell_data>'
-                    )
-
-        wb.close()
+            # Extract top 25 rows via iter_rows (safe and fast in read_only mode)
+            extracted_cells = []
+            for r_idx, row_vals in enumerate(
+                ws.iter_rows(min_row=1, max_row=25, max_col=15, values_only=True),
+                start=1,
+            ):
+                for c_idx, raw_val in enumerate(row_vals, start=1):
+                    if raw_val is not None and str(raw_val).strip():
+                        # 1. Sanitize PII
+                        clean_text, _ = PIISanitizer.sanitize_text(str(raw_val))
+                        # 2. Escape XML entities to prevent prompt injection (AT16)
+                        safe_text = PIISanitizer.safe_cell_content(clean_text)
+                        extracted_cells.append(
+                            f'<cell_data sheet="{target_sheet}" row="{r_idx}" col="{c_idx}">{safe_text}</cell_data>'
+                        )
+        finally:
+            wb.close()
 
         if not extracted_cells:
             return None, "FAILED", "Tidak ditemukan data teks pada lembar kerja yang dipilih."
@@ -102,6 +104,7 @@ class AIMappingAssistant:
         )
 
         if proposal:
+            proposal.sheet_name = target_sheet
             if proposal.confidence_score < 0.80:
                 proposal.is_ambiguous = True
 

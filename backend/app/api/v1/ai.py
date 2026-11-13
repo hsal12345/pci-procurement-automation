@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
@@ -12,6 +13,7 @@ from app.models.imports import ImportRecord
 from app.models.packages import PackageRevision
 from app.schemas.ai import (
     CandidateMappingProposal,
+    AIMappingSuggestRequest,
     SemanticAuditRequest,
     SemanticAuditResponse,
     UpdatePassingGradeRequest,
@@ -385,40 +387,71 @@ async def ai_playground_test(
 # Core Transaction Operations (Mapping & Discrepancy Audit)
 # =========================================================================
 
+def _resolve_import_workbook_path(rec: ImportRecord) -> Path:
+    upload_dir = settings.get_upload_dir()
+    meta = rec.sheet_metadata or {}
+    stored_filename = meta.get("stored_filename")
+    if stored_filename:
+        candidate = upload_dir / stored_filename
+        if candidate.exists():
+            return candidate
+
+    matching_files = list(upload_dir.glob(f"*_{rec.original_filename}"))
+    if matching_files:
+        return matching_files[0]
+
+    fallback_file = upload_dir / rec.original_filename
+    if fallback_file.exists():
+        return fallback_file
+
+    raise HTTPException(
+        status_code=404,
+        detail="Berkas fisik spreadsheet tidak ditemukan di penyimpanan server."
+    )
+
+
 @router.post("/imports/{id}/suggest-mapping", response_model=CandidateMappingProposal)
 async def ai_suggest_mapping(
     id: UUID,
+    payload: Optional[AIMappingSuggestRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance)
+    actor_role: str = Depends(require_admin_or_finance),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Requests an intelligent candidate column mapping proposal from the advisory AI
-    for non-standard uploaded spreadsheets (PRD Section FR02 and FR05).
+    for non-standard uploaded spreadsheets (PRD Section FR02 and FR05 / SD-02 Step 3).
     """
     res = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
     rec = res.scalar_one_or_none()
     if not rec:
         raise HTTPException(status_code=404, detail=f"Data impor dengan ID {id} tidak ditemukan.")
 
-    upload_dir = settings.get_upload_dir()
-    matching_files = list(upload_dir.glob(f"*_{rec.original_filename}"))
-    if not matching_files:
-        fallback_file = upload_dir / rec.original_filename
-        if fallback_file.exists():
-            workbook_path = fallback_file
-        else:
-            raise HTTPException(
-                status_code=404,
-                detail="Berkas fisik spreadsheet tidak ditemukan di penyimpanan server."
-            )
-    else:
-        workbook_path = matching_files[0]
+    workbook_path = _resolve_import_workbook_path(rec)
+    requested_sheet = payload.sheet_name if payload and payload.sheet_name else (rec.sheet_metadata or {}).get("active_sheet")
 
     proposal, status_code, err_msg = await AIMappingAssistant.suggest_mapping_for_workbook(
         workbook_path=workbook_path,
-        db=db
+        db=db,
+        sheet_name=requested_sheet,
     )
 
+    updated_meta = dict(rec.sheet_metadata or {})
+
     if not proposal:
+        updated_meta["ai_status"] = status_code or "UNAVAILABLE"
+        updated_meta["ai_error"] = err_msg or "Layanan AI tidak tersedia. Gunakan pemetaan kolom manual."
+        rec.sheet_metadata = updated_meta
+        await audit_service.log_event(
+            db=db,
+            entity_name="ImportRecord",
+            entity_id=str(rec.id),
+            action="AI_MAPPING_FALLBACK",
+            actor=actor_name,
+            after_state={"ai_status": status_code, "sheet_name": requested_sheet},
+            reason=err_msg or "Layanan AI tidak tersedia; dialihkan ke pemetaan kolom manual."
+        )
+        await db.commit()
+
         if status_code == "BUDGET_EXCEEDED":
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -428,6 +461,26 @@ async def ai_suggest_mapping(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=err_msg or "Layanan bantuan pemetaan AI sedang tidak tersedia. Gunakan pemetaan manual."
         )
+
+    updated_meta["ai_status"] = status_code or "COMPLETED"
+    updated_meta["ai_error"] = None
+    updated_meta["ai_mapping_proposal"] = proposal.model_dump()
+    rec.sheet_metadata = updated_meta
+    await audit_service.log_event(
+        db=db,
+        entity_name="ImportRecord",
+        entity_id=str(rec.id),
+        action="AI_MAPPING_PROPOSED",
+        actor=actor_name,
+        after_state={
+            "sheet_name": proposal.sheet_name,
+            "header_row_index": proposal.header_row_index,
+            "confidence_score": proposal.confidence_score,
+            "is_ambiguous": proposal.is_ambiguous,
+        },
+        reason="Usulan pemetaan kolom AI berhasil dihasilkan untuk ditinjau staf."
+    )
+    await db.commit()
 
     return proposal
 

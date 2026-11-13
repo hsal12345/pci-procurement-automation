@@ -20,6 +20,13 @@ import {
   SystemKnowledgeChatRequest,
   SystemKnowledgeChatResponse,
 } from "@/types/ai";
+import {
+  ImportUploadResponse,
+  ImportPreviewResponse,
+  ImportReparseRequest,
+  ImportConfirmRequest,
+  ImportConfirmResponse,
+} from "@/types/imports";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -417,9 +424,31 @@ export const apiClient = {
       body: JSON.stringify(payload),
     }),
 
-  suggestAIMapping: (importId: string) =>
+  suggestAIMapping: (importId: string, sheetName?: string) =>
     request<CandidateMappingProposal>(`/api/v1/ai/imports/${importId}/suggest-mapping`, {
       method: "POST",
+      body: JSON.stringify(sheetName ? { sheet_name: sheetName } : {}),
+    }),
+
+  uploadImportExcel: (formData: FormData) =>
+    request<ImportUploadResponse>("/api/v1/imports/upload", {
+      method: "POST",
+      body: formData,
+    }),
+
+  getImportPreview: (importId: string) =>
+    request<ImportPreviewResponse>(`/api/v1/imports/${importId}/preview`),
+
+  reparseImport: (importId: string, payload: ImportReparseRequest) =>
+    request<ImportPreviewResponse>(`/api/v1/imports/${importId}/reparse`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  confirmImport: (importId: string, payload: ImportConfirmRequest) =>
+    request<ImportConfirmResponse>(`/api/v1/imports/${importId}/confirm`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 
   downloadImportTemplate: async () => {

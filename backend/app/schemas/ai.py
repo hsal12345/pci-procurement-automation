@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class CandidateMappingProposal(BaseModel):
     """Structured proposal for spreadsheet header row index and column positions."""
+    sheet_name: Optional[str] = Field(None, description="Target worksheet name analyzed.")
     column_mapping: Dict[str, int] = Field(
         ...,
         description="Dictionary mapping canonical line attributes (line_no, description, specification, quantity, unit, hps_price, offer_price, final_price) to 1-indexed column indices."
@@ -13,6 +14,11 @@ class CandidateMappingProposal(BaseModel):
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Confidence score between 0.0 and 1.0.")
     reasoning: str = Field(..., description="Detailed rationale explaining why this header and column mapping was inferred.")
     is_ambiguous: bool = Field(False, description="Flagged true if confidence_score < 0.80, requiring mandatory manual review.")
+
+
+class AIMappingSuggestRequest(BaseModel):
+    """Optional request parameters when requesting AI column mapping suggestion."""
+    sheet_name: Optional[str] = Field(None, description="Specific worksheet name to analyze; defaults to active/first sheet.")
 
 
 class SemanticDiscrepancyItem(BaseModel):

@@ -2,23 +2,79 @@ import shutil
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Optional
 from uuid import UUID, uuid4
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 from app.api.deps import get_current_actor_name, get_current_user_role
 from app.config import settings
 from app.database import get_db
 from app.models.imports import ImportRecord
-from app.models.masters import School, Company, TaxPolicyVersion, OfficialAppointment
-from app.models.packages import Package, PackageRevision, RevisionLine, DocumentEvent, DocumentNumber
-from app.schemas.imports import ImportUploadResponse, ImportPreviewResponse, ImportConfirmRequest
+from app.models.masters import Company, FundingSource, Item, OfficialAppointment, School, TaxPolicyVersion
+from app.models.packages import DocumentEvent, DocumentNumber, Package, PackageRevision, RevisionLine
+from app.schemas.imports import (
+    ImportConfirmRequest,
+    ImportPreviewResponse,
+    ImportReparseRequest,
+    ImportUploadResponse,
+)
+from app.services.audit_service import audit_service
 from app.services.import_service import ExcelImportService
 from app.core.terbilang import terbilang
 
 router = APIRouter(prefix="/imports", tags=["Imports"])
 import_service = ExcelImportService()
+
+
+def _resolve_workbook_path(rec: ImportRecord) -> Path:
+    upload_dir = settings.get_upload_dir()
+    meta = rec.sheet_metadata or {}
+    stored_filename = meta.get("stored_filename")
+    if stored_filename:
+        candidate = upload_dir / stored_filename
+        if candidate.exists():
+            return candidate
+
+    matching = list(upload_dir.glob(f"*_{rec.original_filename}"))
+    if matching:
+        return matching[0]
+
+    fallback = upload_dir / rec.original_filename
+    if fallback.exists():
+        return fallback
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Berkas fisik spreadsheet tidak ditemukan di penyimpanan server.",
+    )
+
+
+def _build_preview_response(rec: ImportRecord) -> ImportPreviewResponse:
+    payload = rec.candidate_payload or {}
+    meta = rec.sheet_metadata or {}
+    return ImportPreviewResponse(
+        import_id=rec.id,
+        filename=rec.original_filename,
+        file_hash=rec.file_hash,
+        status=rec.status,
+        sheet_names=meta.get("sheet_names") or payload.get("sheet_names", []),
+        active_sheet=meta.get("active_sheet") or payload.get("active_sheet", "HPS"),
+        raw_preview_rows=payload.get("raw_preview_rows", []),
+        header_row_index=meta.get("header_row_index") or payload.get("header_row_index"),
+        detected_mapping=meta.get("confirmed_mapping") or meta.get("detected_mapping") or payload.get("detected_mapping", {}),
+        ai_proposal=meta.get("ai_mapping_proposal"),
+        ai_status=meta.get("ai_status"),
+        ai_error=meta.get("ai_error"),
+        upload_context=meta.get("upload_context", {}),
+        school_candidate=payload.get("school_candidate", {}),
+        transaction_metadata=payload.get("transaction_metadata", {}),
+        candidate_lines=payload.get("candidate_lines", []),
+        events_candidate=payload.get("events_candidate", []),
+        detected_discrepancies=rec.detected_discrepancies or [],
+        can_proceed_to_confirm=payload.get("can_proceed_to_confirm", False),
+    )
 
 
 @router.get("/template")
@@ -37,12 +93,18 @@ async def download_import_template():
 @router.post("/upload", response_model=ImportUploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_excel_import(
     file: UploadFile = File(...),
+    school_id: Optional[str] = Form(None),
+    fiscal_year: Optional[int] = Form(None),
+    quarter: Optional[int] = Form(None),
+    fund_source: Optional[str] = Form(None),
+    sheet_name: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
     role: str = Depends(get_current_user_role),
     actor_name: str = Depends(get_current_actor_name),
 ):
-    """Uploads an .xlsx workbook, securely parses structural content,
-    and stores candidate JSON with detected discrepancies.
+    """Uploads an .xlsx workbook, validates file structure & integrity before AI invocation,
+    securely parses structural content, and stores candidate JSON with detected discrepancies
+    (SD-02 Step 1-2 / UC-02 2a).
     """
     if role not in ("ADMINISTRATION", "SYSTEM_ADMINISTRATOR"):
         raise HTTPException(
@@ -50,41 +112,93 @@ async def upload_excel_import(
             detail="Akses ditolak: Hanya staf Administrasi atau Administrator Sistem yang dapat mengimpor spreadsheet.",
         )
 
-    if not file.filename.endswith(".xlsx"):
+    filename = Path(file.filename or "upload.xlsx").name
+    lower_name = filename.lower()
+    if lower_name.endswith(".xls") and not lower_name.endswith(".xlsx"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Hanya file berekstensi .xlsx yang didukung untuk impor berkas pengadaan."
+            detail="Format lama .xls tidak didukung langsung. Silakan simpan ulang sebagai .xlsx terlebih dahulu.",
+        )
+    if not lower_name.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Hanya file berekstensi .xlsx yang didukung untuk impor berkas pengadaan.",
         )
 
-    temp_path = settings.get_upload_dir() / f"{uuid4()}_{file.filename}"
+    stored_filename = f"{uuid4()}_{filename}"
+    temp_path = settings.get_upload_dir() / stored_filename
     with open(temp_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+
+    # Validate structural integrity BEFORE calling AI or persisting ImportRecord
+    try:
+        import_service.validate_workbook_integrity(temp_path)
+    except Exception as exc:
+        temp_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Berkas Excel tidak valid atau rusak: {exc}",
+        )
 
     file_hash = import_service.compute_sha256(temp_path)
     file_size = temp_path.stat().st_size
 
     # Parse structural workbook
     try:
-        parsed_result = import_service.parse_workbook(temp_path)
+        parsed_result = import_service.parse_workbook(temp_path, sheet_name=sheet_name)
     except Exception as e:
         temp_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Gagal memproses struktur berkas Excel: {str(e)}"
+            detail=f"Gagal memproses struktur berkas Excel: {str(e)}",
         )
+
+    upload_context = {
+        "school_id": school_id,
+        "fiscal_year": fiscal_year,
+        "quarter": quarter,
+        "funding_source_code": fund_source or "BOS_REGULER",
+    }
+
+    sheet_meta = {
+        "stored_filename": stored_filename,
+        "sheet_names": parsed_result["sheet_names"],
+        "active_sheet": parsed_result["active_sheet"],
+        "header_row_index": parsed_result.get("header_row_index"),
+        "detected_mapping": parsed_result.get("detected_mapping", {}),
+        "upload_context": upload_context,
+    }
 
     # Store import record in database
     import_record = ImportRecord(
-        original_filename=file.filename,
+        original_filename=filename,
         file_hash=file_hash,
         file_size=file_size,
         uploader=actor_name,
         status="PARSED",
         candidate_payload=parsed_result,
-        sheet_metadata={"sheet_names": parsed_result["sheet_names"]},
+        sheet_metadata=sheet_meta,
         detected_discrepancies=parsed_result["detected_discrepancies"],
     )
     db.add(import_record)
+    await db.flush()
+
+    await audit_service.log_event(
+        db=db,
+        entity_name="ImportRecord",
+        entity_id=str(import_record.id),
+        action="UPLOAD_EXCEL",
+        actor=actor_name,
+        after_state={
+            "filename": filename,
+            "file_hash": file_hash,
+            "file_size": file_size,
+            "active_sheet": parsed_result["active_sheet"],
+            "candidate_lines_count": len(parsed_result.get("candidate_lines", [])),
+        },
+        reason="Berkas Excel berhasil diunggah dan lolos pemeriksaan struktur awal.",
+    )
+
     await db.commit()
     await db.refresh(import_record)
 
@@ -92,33 +206,95 @@ async def upload_excel_import(
         import_id=import_record.id,
         filename=import_record.original_filename,
         file_hash=import_record.file_hash,
+        file_size=import_record.file_size,
         status=import_record.status,
-        message="Berkas berhasil diunggah dan diuraikan. Silakan tinjau pratinjau pemetaan sebelum konfirmasi."
+        sheet_names=parsed_result["sheet_names"],
+        active_sheet=parsed_result["active_sheet"],
+        message="Berkas berhasil diunggah dan diuraikan. Lanjutkan peninjauan pemetaan AI sebelum konfirmasi.",
     )
 
 
 @router.get("/{id}/preview", response_model=ImportPreviewResponse)
 async def get_import_preview(id: UUID, db: AsyncSession = Depends(get_db)):
-    """Retrieves normalized preview of candidate transaction lines, metadata,
-    and detected invariant discrepancies for staff confirmation.
+    """Retrieves normalized preview of candidate transaction lines, raw spreadsheet grid,
+    AI column mapping proposal, and detected invariant discrepancies for staff confirmation.
     """
     result = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
     rec = result.scalar_one_or_none()
     if not rec or not rec.candidate_payload:
         raise HTTPException(status_code=404, detail="Data impor berkas tidak ditemukan.")
 
-    payload = rec.candidate_payload
-    return ImportPreviewResponse(
-        import_id=rec.id,
-        filename=rec.original_filename,
-        status=rec.status,
-        school_candidate=payload.get("school_candidate", {}),
-        transaction_metadata=payload.get("transaction_metadata", {}),
-        candidate_lines=payload.get("candidate_lines", []),
-        events_candidate=payload.get("events_candidate", []),
-        detected_discrepancies=rec.detected_discrepancies or [],
-        can_proceed_to_confirm=payload.get("can_proceed_to_confirm", False)
+    return _build_preview_response(rec)
+
+
+@router.post("/{id}/reparse", response_model=ImportPreviewResponse)
+async def reparse_import_with_mapping(
+    id: UUID,
+    request: ImportReparseRequest,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+    actor_name: str = Depends(get_current_actor_name),
+):
+    """Re-parses the uploaded workbook using staff-reviewed or manually adjusted sheet,
+    header row index, and column mapping (SD-02 Step 4-5 / UC-02 3a & 4).
+    """
+    if role not in ("ADMINISTRATION", "SYSTEM_ADMINISTRATOR"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Akses ditolak: Hanya staf Administrasi atau Administrator Sistem yang dapat menyesuaikan pemetaan.",
+        )
+
+    result = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
+    rec = result.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Data impor berkas tidak ditemukan.")
+
+    workbook_path = _resolve_workbook_path(rec)
+    try:
+        parsed_result = import_service.parse_workbook(
+            workbook_path,
+            column_mapping=request.column_mapping or None,
+            sheet_name=request.sheet_name,
+            header_row_index=request.header_row_index,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Gagal menerapkan pemetaan kolom ke berkas Excel: {exc}",
+        )
+
+    updated_meta = dict(rec.sheet_metadata or {})
+    updated_meta["sheet_names"] = parsed_result["sheet_names"]
+    updated_meta["active_sheet"] = parsed_result["active_sheet"]
+    updated_meta["header_row_index"] = parsed_result.get("header_row_index")
+    updated_meta["detected_mapping"] = parsed_result.get("detected_mapping", {})
+    updated_meta["confirmed_mapping"] = request.column_mapping or parsed_result.get("detected_mapping", {})
+    updated_meta["mapping_source"] = request.mapping_source
+
+    rec.candidate_payload = parsed_result
+    rec.detected_discrepancies = parsed_result["detected_discrepancies"]
+    rec.sheet_metadata = updated_meta
+    rec.status = "MAPPED"
+
+    await audit_service.log_event(
+        db=db,
+        entity_name="ImportRecord",
+        entity_id=str(rec.id),
+        action="APPLY_COLUMN_MAPPING",
+        actor=actor_name,
+        after_state={
+            "active_sheet": parsed_result["active_sheet"],
+            "header_row_index": parsed_result.get("header_row_index"),
+            "column_mapping": updated_meta["confirmed_mapping"],
+            "mapping_source": request.mapping_source,
+            "extracted_lines": len(parsed_result.get("candidate_lines", [])),
+        },
+        reason="Staf menerapkan pemetaan kolom dan memperbarui pratinjau baris transaksi.",
     )
+
+    await db.commit()
+    await db.refresh(rec)
+    return _build_preview_response(rec)
 
 
 @router.post("/{id}/confirm", status_code=status.HTTP_201_CREATED)
@@ -127,9 +303,11 @@ async def confirm_import_and_create_package(
     request: ImportConfirmRequest,
     db: AsyncSession = Depends(get_db),
     role: str = Depends(get_current_user_role),
+    actor_name: str = Depends(get_current_actor_name),
 ):
-    """Commits confirmed candidate data into a new package and Revision 1.
-    Snapshots master data immutably and recalculates exact financial totals.
+    """Commits confirmed candidate data into a new package and Revision 1 (status=DRAFT).
+    Validates rows/types/catalog, preserves initial source reference, recalculates exact
+    financial totals deterministically, and records an immutable audit event (SD-02 Step 6-8).
     """
     if role not in ("ADMINISTRATION", "SYSTEM_ADMINISTRATOR"):
         raise HTTPException(
@@ -142,14 +320,51 @@ async def confirm_import_and_create_package(
     if not rec or not rec.candidate_payload:
         raise HTTPException(status_code=404, detail="Data impor berkas tidak ditemukan.")
 
-    payload = rec.candidate_payload
+    payload = dict(rec.candidate_payload)
+    sheet_meta = dict(rec.sheet_metadata or {})
+    upload_ctx = sheet_meta.get("upload_context") or {}
+
+    # Re-parse if caller passed final mapping overrides without explicit confirmed_lines
+    if not request.confirmed_lines and (
+        request.column_mapping or request.sheet_name or request.header_row_index
+    ):
+        workbook_path = _resolve_workbook_path(rec)
+        payload = import_service.parse_workbook(
+            workbook_path,
+            column_mapping=request.column_mapping,
+            sheet_name=request.sheet_name or sheet_meta.get("active_sheet"),
+            header_row_index=request.header_row_index or sheet_meta.get("header_row_index"),
+        )
+        rec.candidate_payload = payload
+
+    lines_data = request.confirmed_lines if request.confirmed_lines is not None else payload.get("candidate_lines", [])
+    validation_errors = import_service.validate_candidate_lines(lines_data)
+    if validation_errors:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Validasi baris/tipe data impor gagal. Perbaiki baris bermasalah sebelum menyimpan draf.",
+                "errors": validation_errors,
+            },
+        )
+
     meta = payload.get("transaction_metadata", {})
-    fiscal_year = meta.get("tahun_anggaran", 2026)
+    fiscal_year = request.fiscal_year or upload_ctx.get("fiscal_year") or meta.get("tahun_anggaran") or 2026
+    quarter = request.quarter or upload_ctx.get("quarter") or 2
+    if quarter < 1 or quarter > 4:
+        quarter = 2
+    funding_code = request.funding_source_code or upload_ctx.get("funding_source_code") or "BOS_REGULER"
 
     # 1. Resolve or create School
-    school_id = request.school_id
-    if not school_id:
-        # Check if school candidate matches an existing school or create one
+    raw_school_id = request.school_id or upload_ctx.get("school_id")
+    resolved_school_uuid: Optional[UUID] = None
+    if raw_school_id:
+        try:
+            resolved_school_uuid = raw_school_id if isinstance(raw_school_id, UUID) else UUID(str(raw_school_id))
+        except ValueError:
+            resolved_school_uuid = None
+
+    if not resolved_school_uuid:
         cand_school = payload.get("school_candidate", {})
         cand_name = cand_school.get("name", "SEKOLAH DASAR NEGERI KEBON KOSONG 09")
         res_school = await db.execute(select(School).where(School.name == cand_name))
@@ -159,13 +374,12 @@ async def confirm_import_and_create_package(
                 name=cand_name,
                 address=cand_school.get("address", "Jl. Kemayoran Gempol no.32"),
                 email=cand_school.get("email", "sdnkk05pg@gmail.com"),
-                level="SD"
+                level="SD",
             )
             db.add(school)
             await db.flush()
-        school_id = school.id
     else:
-        res_school = await db.execute(select(School).where(School.id == school_id))
+        res_school = await db.execute(select(School).where(School.id == resolved_school_uuid))
         school = res_school.scalars().first()
         if not school:
             raise HTTPException(status_code=404, detail="Sekolah yang dipilih tidak ditemukan.")
@@ -174,12 +388,11 @@ async def confirm_import_and_create_package(
     res_company = await db.execute(select(Company).where(Company.is_active == True))
     company = res_company.scalars().first()
     if not company:
-        # Seed default company if none exists
         company = Company(
             legal_name="CV. PUSTAKA CEMERLANG INDONESIA",
             address="Wisma Mitra Sunter Unit 3-03, Jl. Yos Sudarso Kav. 89",
             director_name="Bambang Solifian",
-            director_title="Direktur Utama"
+            director_title="Direktur Utama",
         )
         db.add(company)
         await db.flush()
@@ -188,43 +401,64 @@ async def confirm_import_and_create_package(
     res_taxes = await db.execute(select(TaxPolicyVersion).where(TaxPolicyVersion.is_active == True))
     tax_policies = res_taxes.scalars().all()
     if not tax_policies:
-        # Seed default PPN 11% and PPh 22 1.5%
         p_ppn = TaxPolicyVersion(
-            policy_id="DEFAULT_2026",
+            policy_id=f"DEFAULT_{fiscal_year}",
             version=1,
             tax_type="PPN",
             rate=Decimal("0.11"),
             is_inclusive=False,
             withholding_rule="NONE",
-            rounding_rule="ROUND_HALF_UP"
+            rounding_rule="ROUND_HALF_UP",
         )
         p_pph = TaxPolicyVersion(
-            policy_id="DEFAULT_2026",
+            policy_id=f"DEFAULT_{fiscal_year}",
             version=1,
             tax_type="PPH22",
             rate=Decimal("0.015"),
             is_inclusive=False,
             withholding_rule="WITHHOLD_FROM_PAYABLE",
-            rounding_rule="ROUND_HALF_UP"
+            rounding_rule="ROUND_HALF_UP",
         )
         db.add_all([p_ppn, p_pph])
         await db.flush()
         tax_policies = [p_ppn, p_pph]
 
-    # Snapshots
+    # Resolve optional FundingSource reference
+    funding_source_id = None
+    fs_code_lookup = "BOS" if funding_code.startswith("BOS") else funding_code
+    res_fs = await db.execute(
+        select(FundingSource).where(FundingSource.code.in_([funding_code, fs_code_lookup]))
+    )
+    fs_obj = res_fs.scalars().first()
+    if fs_obj:
+        funding_source_id = fs_obj.id
+
+    # Snapshots (full fidelity matching packages.py)
     school_snapshot = {
         "id": str(school.id),
         "name": school.name,
         "npsn": school.npsn,
         "address": school.address,
-        "email": school.email
+        "email": school.email,
+        "phone": school.phone,
+        "level": school.level,
+        "subdistrict": school.subdistrict,
+        "postal_code": school.postal_code,
+        "letterhead_path": school.letterhead_path,
     }
     company_snapshot = {
         "id": str(company.id),
+        "name": company.legal_name,
         "legal_name": company.legal_name,
+        "npwp": company.npwp,
         "address": company.address,
+        "phone": company.phone,
         "director_name": company.director_name,
-        "director_title": company.director_title
+        "director_title": company.director_title,
+        "bank_name": company.bank_name,
+        "bank_account_number": company.bank_account_number,
+        "bank_account_holder": company.bank_account_holder,
+        "logo_path": company.logo_path,
     }
     tax_snapshot = [
         {
@@ -232,7 +466,7 @@ async def confirm_import_and_create_package(
             "rate": str(tp.rate),
             "is_inclusive": tp.is_inclusive,
             "withholding_rule": tp.withholding_rule,
-            "rounding_rule": tp.rounding_rule
+            "rounding_rule": tp.rounding_rule,
         }
         for tp in tax_policies
     ]
@@ -247,37 +481,38 @@ async def confirm_import_and_create_package(
             school_id=school.id,
             role="KEPALA_SEKOLAH",
             person_name="Drs. H. Mulyadi, M.Pd",
-            nip="196501011990031005"
+            nip="196501011990031005",
         )
         app_ben = OfficialAppointment(
             school_id=school.id,
             role="BENDAHARA",
             person_name="Siti Rahmawati, S.Pd",
-            nip="198005122008012015"
+            nip="198005122008012015",
         )
         app_pb = OfficialAppointment(
             school_id=school.id,
             role="PENGURUS_BARANG",
             person_name="Sulistiawati",
-            nip="197909092022212008"
+            nip="197909092022212008",
         )
         db.add_all([app_ks, app_ben, app_pb])
         await db.flush()
         officials = [app_ks, app_ben, app_pb]
 
     officials_snapshot = [
-        {"role": o.role, "person_name": o.person_name, "name": o.person_name, "nip": o.nip} for o in officials
+        {"role": o.role, "person_name": o.person_name, "name": o.person_name, "nip": o.nip}
+        for o in officials
     ]
     if company:
         officials_snapshot.append({
             "role": "DIREKTUR",
             "person_name": company.director_name or "Bambang Solifian",
             "name": company.director_name or "Bambang Solifian",
-            "nip": None
+            "nip": None,
         })
 
     # 4. Create Package
-    prefix = f"PKG/{fiscal_year}/Q2/"
+    prefix = f"PKG/{fiscal_year}/Q{quarter}/"
     res_pkgs = await db.execute(select(Package.package_number).where(Package.package_number.like(f"{prefix}%")))
     existing_numbers = res_pkgs.scalars().all()
     max_seq = 0
@@ -300,29 +535,44 @@ async def confirm_import_and_create_package(
         package_number=pkg_number,
         school_id=school.id,
         fiscal_year=fiscal_year,
-        quarter=2,
-        status="DRAFT"
+        quarter=quarter,
+        funding_source_id=funding_source_id,
+        status="DRAFT",
     )
     db.add(package)
     await db.flush()
 
-    # 5. Create Revision 1
+    source_ref_note = (
+        f"[Sumber Impor: {rec.original_filename} | ImportID: {rec.id} | SHA256: {rec.file_hash[:16]}]"
+    )
+    revision_notes = f"{request.notes}\n{source_ref_note}".strip() if request.notes else source_ref_note
+
+    # 5. Create Revision 1 (status=DRAFT)
     revision = PackageRevision(
         package_id=package.id,
         revision_number=1,
         version=1,
+        status="DRAFT",
         school_snapshot=school_snapshot,
         company_snapshot=company_snapshot,
         tax_policy_snapshot=tax_snapshot,
         officials_snapshot=officials_snapshot,
-        notes=request.notes
+        notes=revision_notes,
     )
     db.add(revision)
     await db.flush()
 
-    # 6. Create Revision Lines & calculate exact totals
-    lines_data = request.confirmed_lines or payload.get("candidate_lines", [])
+    # Load item catalog lookup map for catalog validation/linking
+    res_catalog = await db.execute(select(Item).where(Item.is_active == True))
+    catalog_by_desc = {
+        item.canonical_description.strip().lower(): item.id
+        for item in res_catalog.scalars().all()
+        if item.canonical_description
+    }
+
+    # 6. Create Revision Lines & calculate exact financial totals (hitungUlangFinansial)
     subtotal = Decimal("0")
+    catalog_matched_count = 0
 
     for idx, l in enumerate(lines_data, start=1):
         qty = Decimal(str(l.get("quantity", 1)))
@@ -356,20 +606,36 @@ async def confirm_import_and_create_package(
 
         subtotal += line_tot
 
+        orig_desc = str(l.get("original_description") or l.get("confirmed_description") or f"Item {idx}").strip()
+        conf_desc = str(l.get("confirmed_description") or orig_desc).strip()
+
+        matched_item_id = l.get("item_id")
+        if not matched_item_id:
+            matched_item_id = catalog_by_desc.get(conf_desc.lower()) or catalog_by_desc.get(orig_desc.lower())
+        elif isinstance(matched_item_id, str):
+            try:
+                matched_item_id = UUID(matched_item_id)
+            except ValueError:
+                matched_item_id = None
+
+        if matched_item_id:
+            catalog_matched_count += 1
+
         rev_line = RevisionLine(
             revision_id=revision.id,
             line_number=idx,
-            original_description=l.get("original_description", f"Item {idx}"),
-            confirmed_description=l.get("confirmed_description", f"Item {idx}"),
+            item_id=matched_item_id,
+            original_description=orig_desc,
+            confirmed_description=conf_desc,
             specification=l.get("specification"),
             quantity=qty,
-            unit=l.get("unit", "buah"),
+            unit=str(l.get("unit") or "buah").strip(),
             hps_unit_price=hps_price,
             offer_unit_price=offer_price,
             final_unit_price=final_price,
             discount=discount,
             line_total=line_tot,
-            condition=l.get("condition", "BAIK")
+            condition=l.get("condition", "BAIK"),
         )
         db.add(rev_line)
 
@@ -393,7 +659,7 @@ async def confirm_import_and_create_package(
             revision_id=revision.id,
             event_code=ev.get("event_code"),
             event_date=date.fromisoformat(ev.get("event_date")),
-            day_name_id=ev.get("day_name_id", "Selasa")
+            day_name_id=ev.get("day_name_id", "Selasa"),
         )
         db.add(doc_event)
 
@@ -405,24 +671,86 @@ async def confirm_import_and_create_package(
             doc_code=doc_code,
             doc_number=f"{i:02d}/PCI/{fiscal_year}",
             issuer="COMPANY" if doc_code in ["D03", "D06", "D07", "D08", "D13"] else "SCHOOL",
-            counter_val=i
+            counter_val=i,
         )
         db.add(doc_num)
 
     package.current_revision_id = revision.id
+    prev_status = rec.status
     rec.status = "CONFIRMED"
+
+    mapping_source = (
+        request.mapping_source
+        or sheet_meta.get("mapping_source")
+        or ("AI" if sheet_meta.get("ai_mapping_proposal") else "HEURISTIC")
+    )
+    confirmed_mapping = request.column_mapping or sheet_meta.get("confirmed_mapping") or sheet_meta.get("detected_mapping") or {}
+
+    sheet_meta["confirmed_package_id"] = str(package.id)
+    sheet_meta["confirmed_revision_id"] = str(revision.id)
+    sheet_meta["confirmed_mapping"] = confirmed_mapping
+    sheet_meta["mapping_source"] = mapping_source
+    sheet_meta["confirmed_at"] = datetime.utcnow().isoformat()
+    rec.sheet_metadata = sheet_meta
+
+    # 9. Immutable Audit Trail (SD-02 Step 8: rekamJejak())
+    audit_payload = {
+        "import_id": str(rec.id),
+        "original_filename": rec.original_filename,
+        "file_hash": rec.file_hash,
+        "package_id": str(package.id),
+        "package_number": package.package_number,
+        "revision_id": str(revision.id),
+        "school_id": str(school.id),
+        "school_name": school.name,
+        "fiscal_year": fiscal_year,
+        "quarter": quarter,
+        "funding_source_code": funding_code,
+        "mapping_source": mapping_source,
+        "confirmed_mapping": confirmed_mapping,
+        "lines_count": len(lines_data),
+        "catalog_matched_count": catalog_matched_count,
+        "subtotal": float(subtotal),
+        "tax_total": float(tax_total),
+        "grand_total": float(grand_total),
+    }
+
+    await audit_service.log_event(
+        db=db,
+        entity_name="ImportRecord",
+        entity_id=str(rec.id),
+        action="CONFIRM_IMPORT",
+        actor=actor_name,
+        before_state={"status": prev_status},
+        after_state=audit_payload,
+        reason="Impor Excel dan konfirmasi pemetaan AI selesai dicatat sebagai Draf transaksi.",
+    )
+
+    await audit_service.log_event(
+        db=db,
+        entity_name="PackageRevision",
+        entity_id=str(revision.id),
+        action="CREATE_DRAFT_FROM_IMPORT",
+        actor=actor_name,
+        after_state=audit_payload,
+        reason=f"Draf paket {package.package_number} dibentuk dari impor Excel {rec.original_filename}.",
+    )
 
     await db.commit()
     await db.refresh(package)
 
     return {
         "message": "Paket pengadaan berhasil dibuat dari data impor.",
+        "import_id": str(rec.id),
+        "file_hash": rec.file_hash,
         "package_id": str(package.id),
         "package_number": package.package_number,
         "revision_id": str(revision.id),
         "revision_number": revision.revision_number,
+        "mapping_source": mapping_source,
+        "catalog_matched_count": catalog_matched_count,
         "subtotal": float(subtotal),
         "tax_total": float(tax_total),
         "grand_total": float(grand_total),
-        "terbilang": revision.terbilang_grand_total
+        "terbilang": revision.terbilang_grand_total,
     }
