@@ -471,7 +471,7 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
       <div className="flex-1 overflow-auto">
         <table className="w-full text-left border-collapse font-sans text-xs">
           <thead>
-            <tr className="bg-muted/90 backdrop-blur border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-slate-200 sticky top-0 z-10 select-none shadow-sm">
+            <tr className="bg-muted/90 backdrop-blur border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-foreground sticky top-0 z-10 select-none shadow-sm">
               <th className="px-1.5 py-2 w-8 text-center border-r border-border">No</th>
               <th className="px-2.5 py-2 min-w-[200px] border-r border-border">Deskripsi Barang</th>
               <th className="px-2.5 py-2 min-w-[140px] border-r border-border">Spesifikasi</th>
@@ -591,11 +591,11 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
                       onKeyDown={(e) => handleKeyDown(e, idx, "final_unit_price")}
                       onBlur={() => handleBlur(idx, "final_unit_price")}
                       className={`w-full h-8 px-2 py-1 text-right bg-transparent tabular-nums font-bold outline-none focus:ring-2 focus:ring-primary/40 focus:bg-primary/5 font-mono ${
-                        isZeroPrice ? "text-amber-300 bg-amber-500/15" : "text-foreground"
+                        isZeroPrice ? "text-amber-700 dark:text-amber-300 bg-amber-500/15" : "text-foreground"
                       }`}
                     />
                     {isZeroPrice && (
-                      <span className="absolute left-1 top-2 text-[9px] font-mono px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 pointer-events-none">
+                      <span className="absolute left-1 top-2 text-[9px] font-mono px-1 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 pointer-events-none">
                         GRATIS
                       </span>
                     )}
@@ -665,7 +665,7 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
             <span className="font-bold text-foreground uppercase tracking-wide">
               Grand Total (Termasuk PPN):
             </span>
-            <span className="font-bold tabular-nums text-base text-emerald-300">
+            <span className="font-bold tabular-nums text-base text-emerald-700 dark:text-emerald-300">
               {formatIDR(computedGrandTotal)}
             </span>
           </div>
