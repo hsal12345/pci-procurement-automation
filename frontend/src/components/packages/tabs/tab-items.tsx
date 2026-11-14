@@ -7,6 +7,11 @@ import { apiClient } from "@/lib/api-client";
 import { formatIDR, formatTabularNumber, terbilangIndonesian } from "@/lib/formatters";
 import { ZeroPriceModal } from "../zero-price-modal";
 import {
+  CatalogPickerModal,
+  CatalogItem,
+  isPlaceholderLine,
+} from "../catalog-picker-modal";
+import {
   Plus,
   Trash2,
   Zap,
@@ -48,11 +53,25 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
   const [lines, setLines] = useState<RevisionLine[]>(() => revision.lines || []);
   const [activeCell, setActiveCell] = useState<{ row: number; col: EditableColumn } | null>(null);
   const [zeroPriceTarget, setZeroPriceTarget] = useState<{ row: number; line: RevisionLine } | null>(null);
-  const [catalogItems, setCatalogItems] = useState<any[]>([]);
+  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
 
   // Load active catalog items (FR-01 KatalogBarang)
+  const loadCatalogItems = async () => {
+    setIsCatalogLoading(true);
+    try {
+      const items = await apiClient.getItems({ active_only: true });
+      setCatalogItems(items || []);
+    } catch {
+      setCatalogItems([]);
+    } finally {
+      setIsCatalogLoading(false);
+    }
+  };
+
   useEffect(() => {
-    apiClient.getItems({ active_only: true }).then(setCatalogItems).catch(() => setCatalogItems([]));
+    loadCatalogItems();
   }, []);
 
   // Sync when revision lines reload externally
@@ -257,37 +276,52 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
     setTimeout(() => focusCell(updated.length - 1, "confirmed_description"), 50);
   };
 
-  // Add row from KatalogBarang master data (FR-01)
-  const handleAddFromCatalog = (catalogItemId: string) => {
-    const item = catalogItems.find((c) => c.id === catalogItemId);
-    if (!item) return;
-    const nextLineNo = lines.length > 0 ? Math.max(...lines.map((l) => l.line_number)) + 1 : 1;
-    const refPrice = Number(item.reference_price || 0);
-    const specParts = [
-      item.default_spec || "",
-      item.sku ? `SKU: ${item.sku}` : "",
-      item.kbli ? `KBLI: ${item.kbli}` : "",
-    ].filter(Boolean);
+  // Add one or more rows from KatalogBarang master data via modal selection table (FR-01)
+  const handleAddFromCatalogSelections = (
+    selections: Array<{ item: CatalogItem; quantity: number }>,
+    options: { replaceEmptyPlaceholders: boolean }
+  ) => {
+    if (selections.length === 0) return;
 
-    const newLine: RevisionLine = {
-      line_number: nextLineNo,
-      item_id: item.id,
-      original_description: item.canonical_description,
-      confirmed_description: item.canonical_description,
-      specification: specParts.join(" | ") || "-",
-      quantity: 1,
-      received_quantity: 1,
-      unit: item.default_unit || "Pcs",
-      hps_unit_price: refPrice,
-      offer_unit_price: refPrice,
-      final_unit_price: refPrice,
-      discount: 0,
-      line_total: refPrice,
-      condition: "BAIK",
-    };
-    const updated = [...lines, newLine];
+    const baseLines = options.replaceEmptyPlaceholders
+      ? lines.filter((l) => !isPlaceholderLine(l))
+      : [...lines];
+
+    const addedLines: RevisionLine[] = selections.map(({ item, quantity }, idx) => {
+      const qty = Math.max(1, Number(quantity) || 1);
+      const refPrice = Number(item.reference_price || 0);
+      const lineTotal = new Decimal(qty).times(new Decimal(refPrice)).round().toNumber();
+      const specParts = [
+        item.default_spec || "",
+        item.sku ? `SKU: ${item.sku}` : "",
+        item.kbli ? `KBLI: ${item.kbli}` : "",
+      ].filter(Boolean);
+
+      return {
+        line_number: baseLines.length + idx + 1,
+        item_id: item.id,
+        original_description: item.canonical_description,
+        confirmed_description: item.canonical_description,
+        specification: specParts.join(" | ") || "-",
+        quantity: qty,
+        received_quantity: qty,
+        unit: item.default_unit || "Pcs",
+        hps_unit_price: refPrice,
+        offer_unit_price: refPrice,
+        final_unit_price: refPrice,
+        discount: 0,
+        line_total: lineTotal,
+        condition: "BAIK",
+      };
+    });
+
+    const updated = [...baseLines, ...addedLines].map((l, i) => ({
+      ...l,
+      line_number: i + 1,
+    }));
     setLines(updated);
     onLinesChanged(updated);
+    setIsCatalogModalOpen(false);
   };
 
   // Remove line row
@@ -314,6 +348,7 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
       : [{ tax_type: "PPN", rate_percent: 11, is_withholding: false }];
 
   let taxTotalDec = new Decimal(0);
+  let effectiveNonWithholdingTaxRatePercent = 0;
   const taxDetails: Array<{ tax_type: string; amount: number; rate: number }> = [];
 
   taxPolicies.forEach((p) => {
@@ -345,6 +380,7 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
     });
     if (!isWithholding) {
       taxTotalDec = taxTotalDec.plus(amountDec);
+      effectiveNonWithholdingTaxRatePercent += ratePct;
     }
   });
 
@@ -404,26 +440,20 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
           </span>
           {!isReadOnly && (
             <div className="flex items-center gap-1.5">
-              {catalogItems.length > 0 && (
-                <div className="flex items-center gap-1">
-                  <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) handleAddFromCatalog(e.target.value);
-                    }}
-                    className="px-2 py-1 rounded bg-background border border-emerald-500/40 text-foreground text-[11px] font-sans outline-none focus:ring-1 focus:ring-primary max-w-[220px]"
-                    title="Pilih barang dari Master Katalog Barang (KBLI, SKU, Harga Acuan)"
-                  >
-                    <option value="">+ Pilih dari Katalog Barang...</option>
-                    {catalogItems.map((ci) => (
-                      <option key={ci.id} value={ci.id}>
-                        [{ci.sku || ci.kbli || "KAT"}] {ci.canonical_description} ({formatIDR(Number(ci.reference_price || 0))}/{ci.default_unit || "Pcs"})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => setIsCatalogModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-medium text-[11px] transition"
+                title="Buka tabel pemilihan Master Katalog Barang dengan asisten pencarian & estimasi harga"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Pilih Katalog Barang</span>
+                {catalogItems.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-200 font-mono text-[10px]">
+                    {catalogItems.length}
+                  </span>
+                )}
+              </button>
               <button
                 type="button"
                 onClick={handleAddRow}
@@ -649,6 +679,19 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
           </div>
         </div>
       </div>
+
+      {/* Catalog Picker Modal (Selection Table with Assistance) */}
+      <CatalogPickerModal
+        isOpen={isCatalogModalOpen}
+        catalogItems={catalogItems}
+        isLoading={isCatalogLoading}
+        existingLines={lines}
+        currentSubtotal={computedSubtotal}
+        effectiveTaxRatePercent={effectiveNonWithholdingTaxRatePercent}
+        onRefreshCatalog={loadCatalogItems}
+        onConfirm={handleAddFromCatalogSelections}
+        onClose={() => setIsCatalogModalOpen(false)}
+      />
 
       {/* Zero Price Justification Modal */}
       {zeroPriceTarget && (
