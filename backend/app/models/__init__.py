@@ -12,6 +12,7 @@ from app.models.masters import (
     PackageProfile,
     NumberingPolicy,
     NumberCounter,
+    TemplateRegistry,
 )
 from app.models.packages import (
     Package,
@@ -70,6 +71,7 @@ __all__ = [
     "PackageProfile",
     "NumberingPolicy",
     "NumberCounter",
+    "TemplateRegistry",
     "Package",
     "PackageRevision",
     "RevisionLine",

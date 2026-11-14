@@ -30,5 +30,5 @@ RUN mkdir -p /app/default_assets/schools /app/default_assets/companies && \
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "mkdir -p /app/storage/artifacts /app/storage/evidence /app/storage/uploads/letterheads/schools /app/storage/uploads/letterheads/companies && cp -n /app/default_assets/schools/* /app/storage/uploads/letterheads/schools/ 2>/dev/null || true && cp -n /app/default_assets/companies/* /app/storage/uploads/letterheads/companies/ 2>/dev/null || true && python seed_master_data.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "mkdir -p /app/storage/artifacts /app/storage/evidence /app/storage/uploads/letterheads/schools /app/storage/uploads/letterheads/companies /app/storage/templates/active /app/storage/templates/versions && cp -n /app/default_assets/schools/* /app/storage/uploads/letterheads/schools/ 2>/dev/null || true && cp -n /app/default_assets/companies/* /app/storage/uploads/letterheads/companies/ 2>/dev/null || true && python seed_master_data.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
 

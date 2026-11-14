@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Decimal } from "decimal.js";
 import { RevisionLine, PackageRevision } from "@/types/package";
+import { apiClient } from "@/lib/api-client";
 import { formatIDR, formatTabularNumber, terbilangIndonesian } from "@/lib/formatters";
 import { ZeroPriceModal } from "../zero-price-modal";
 import {
@@ -13,6 +14,7 @@ import {
   Info,
   AlertTriangle,
   Calculator,
+  BookOpen,
 } from "lucide-react";
 
 interface TabItemsProps {
@@ -46,6 +48,12 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
   const [lines, setLines] = useState<RevisionLine[]>(() => revision.lines || []);
   const [activeCell, setActiveCell] = useState<{ row: number; col: EditableColumn } | null>(null);
   const [zeroPriceTarget, setZeroPriceTarget] = useState<{ row: number; line: RevisionLine } | null>(null);
+  const [catalogItems, setCatalogItems] = useState<any[]>([]);
+
+  // Load active catalog items (FR-01 KatalogBarang)
+  useEffect(() => {
+    apiClient.getItems({ active_only: true }).then(setCatalogItems).catch(() => setCatalogItems([]));
+  }, []);
 
   // Sync when revision lines reload externally
   useEffect(() => {
@@ -249,6 +257,39 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
     setTimeout(() => focusCell(updated.length - 1, "confirmed_description"), 50);
   };
 
+  // Add row from KatalogBarang master data (FR-01)
+  const handleAddFromCatalog = (catalogItemId: string) => {
+    const item = catalogItems.find((c) => c.id === catalogItemId);
+    if (!item) return;
+    const nextLineNo = lines.length > 0 ? Math.max(...lines.map((l) => l.line_number)) + 1 : 1;
+    const refPrice = Number(item.reference_price || 0);
+    const specParts = [
+      item.default_spec || "",
+      item.sku ? `SKU: ${item.sku}` : "",
+      item.kbli ? `KBLI: ${item.kbli}` : "",
+    ].filter(Boolean);
+
+    const newLine: RevisionLine = {
+      line_number: nextLineNo,
+      item_id: item.id,
+      original_description: item.canonical_description,
+      confirmed_description: item.canonical_description,
+      specification: specParts.join(" | ") || "-",
+      quantity: 1,
+      received_quantity: 1,
+      unit: item.default_unit || "Pcs",
+      hps_unit_price: refPrice,
+      offer_unit_price: refPrice,
+      final_unit_price: refPrice,
+      discount: 0,
+      line_total: refPrice,
+      condition: "BAIK",
+    };
+    const updated = [...lines, newLine];
+    setLines(updated);
+    onLinesChanged(updated);
+  };
+
   // Remove line row
   const handleDeleteRow = (index: number) => {
     if (lines.length <= 1) {
@@ -362,14 +403,36 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
             <Info className="w-3 h-3" /> Navigasi: [Tab] / [Enter] • Salin kolom sebelumnya: [Alt+C]
           </span>
           {!isReadOnly && (
-            <button
-              type="button"
-              onClick={handleAddRow}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium text-[11px] transition hover:opacity-90"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Tambah Baris</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              {catalogItems.length > 0 && (
+                <div className="flex items-center gap-1">
+                  <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) handleAddFromCatalog(e.target.value);
+                    }}
+                    className="px-2 py-1 rounded bg-background border border-emerald-500/40 text-foreground text-[11px] font-sans outline-none focus:ring-1 focus:ring-primary max-w-[220px]"
+                    title="Pilih barang dari Master Katalog Barang (KBLI, SKU, Harga Acuan)"
+                  >
+                    <option value="">+ Pilih dari Katalog Barang...</option>
+                    {catalogItems.map((ci) => (
+                      <option key={ci.id} value={ci.id}>
+                        [{ci.sku || ci.kbli || "KAT"}] {ci.canonical_description} ({formatIDR(Number(ci.reference_price || 0))}/{ci.default_unit || "Pcs"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleAddRow}
+                className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium text-[11px] transition hover:opacity-90"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Tambah Baris</span>
+              </button>
+            </div>
           )}
         </div>
       </div>

@@ -35,8 +35,60 @@ const EVENT_ORDER: EventItemConfig[] = [
   { code: "KWITANSI", doc_code: "D07", name: "Kwitansi Pembayaran Resmi BOS", issuer: "SCHOOL" },
 ];
 
+// Daftar Hari Libur Nasional Indonesia (SKB 3 Menteri 2025 & 2026) — BR12 / Bab 6 Tabel 6.1
+const INDONESIAN_NATIONAL_HOLIDAYS: Record<string, string> = {
+  "2025-01-01": "Tahun Baru 2025 Masehi",
+  "2025-01-27": "Isra Mikraj Nabi Muhammad SAW",
+  "2025-01-29": "Tahun Baru Imlek 2576",
+  "2025-03-29": "Hari Suci Nyepi 1947",
+  "2025-03-31": "Idulfitri 1446 H",
+  "2025-04-01": "Idulfitri 1446 H",
+  "2025-04-18": "Wafat Yesus Kristus",
+  "2025-04-20": "Paskah",
+  "2025-05-01": "Hari Buruh Internasional",
+  "2025-05-12": "Hari Raya Waisak 2569",
+  "2025-05-29": "Kenaikan Yesus Kristus",
+  "2025-06-01": "Hari Lahir Pancasila",
+  "2025-06-06": "Iduladha 1446 H",
+  "2025-06-27": "Tahun Baru Islam 1447 H",
+  "2025-08-17": "Hari Kemerdekaan RI",
+  "2025-09-05": "Maulid Nabi Muhammad SAW",
+  "2025-12-25": "Hari Raya Natal",
+  "2026-01-01": "Tahun Baru 2026 Masehi",
+  "2026-01-16": "Isra Mikraj Nabi Muhammad SAW",
+  "2026-02-17": "Tahun Baru Imlek 2577",
+  "2026-03-19": "Hari Suci Nyepi 1948",
+  "2026-03-20": "Idulfitri 1447 H (Hari Pertama)",
+  "2026-03-21": "Idulfitri 1447 H (Hari Kedua)",
+  "2026-04-03": "Wafat Yesus Kristus",
+  "2026-04-05": "Paskah",
+  "2026-05-01": "Hari Buruh Internasional",
+  "2026-05-14": "Kenaikan Yesus Kristus",
+  "2026-05-27": "Iduladha 1447 H",
+  "2026-05-31": "Hari Raya Waisak 2570",
+  "2026-06-01": "Hari Lahir Pancasila",
+  "2026-06-16": "Tahun Baru Islam 1448 H",
+  "2026-08-17": "Hari Kemerdekaan RI",
+  "2026-08-25": "Maulid Nabi Muhammad SAW",
+  "2026-12-25": "Hari Raya Natal",
+};
+
+function isHolidayOrWeekend(isoDate: string): string | null {
+  if (!isoDate) return null;
+  if (INDONESIAN_NATIONAL_HOLIDAYS[isoDate]) {
+    return `Hari Libur Nasional: ${INDONESIAN_NATIONAL_HOLIDAYS[isoDate]}`;
+  }
+  const [y, m, d] = isoDate.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dow = dt.getUTCDay();
+  if (dow === 0) return "Akhir Pekan (Minggu)";
+  if (dow === 6) return "Akhir Pekan (Sabtu)";
+  return null;
+}
+
 /**
- * Helper to add business days (skipping Saturday and Sunday)
+ * Helper to add business days (skipping Saturday, Sunday, and Indonesian national holidays)
  */
 function addBusinessDays(startDateStr: string, daysToAdd: number): string {
   if (!startDateStr) return "";
@@ -45,14 +97,12 @@ function addBusinessDays(startDateStr: string, daysToAdd: number): string {
   let added = 0;
   while (added < daysToAdd) {
     cur.setUTCDate(cur.getUTCDate() + 1);
-    const dayOfWeek = cur.getUTCDay();
-    // 0 = Sunday, 6 = Saturday
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+    const iso = cur.toISOString().split("T")[0];
+    if (!isHolidayOrWeekend(iso)) {
       added++;
     }
   }
-  // Ensure it never lands on weekend
-  while (cur.getUTCDay() === 0 || cur.getUTCDay() === 6) {
+  while (isHolidayOrWeekend(cur.toISOString().split("T")[0])) {
     cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return cur.toISOString().split("T")[0];
@@ -361,6 +411,7 @@ export function TabDatesNumbers({ revision, isReadOnly, onDataChanged }: TabDate
               const isInverted = Boolean(
                 prevDate && currentDate && new Date(currentDate) < new Date(prevDate)
               );
+              const holidayWarning = currentDate ? isHolidayOrWeekend(currentDate) : null;
 
               const docNum = getNumber(item.doc_code, item.code);
               const isCompanyGenerated = docNum?.issuer === "COMPANY" || item.issuer === "COMPANY";
@@ -410,6 +461,12 @@ export function TabDatesNumbers({ revision, isReadOnly, onDataChanged }: TabDate
                       {currentDate && !isInverted && (
                         <div className="text-[10px] text-muted-foreground font-sans truncate">
                           {formatDateIndo(currentDate)}
+                        </div>
+                      )}
+                      {holidayWarning && (
+                        <div className="text-[10px] text-amber-400 font-sans flex items-center gap-1 font-semibold">
+                          <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                          <span>BR12: {holidayWarning}</span>
                         </div>
                       )}
                     </div>

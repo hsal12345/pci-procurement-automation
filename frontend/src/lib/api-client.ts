@@ -690,11 +690,25 @@ export const apiClient = {
   getArtifacts: (revisionId: string) =>
     request<Artifact[]>(`/api/v1/revisions/${revisionId}/artifacts`),
 
-  // Audit Events
-  getAuditEvents: (params?: { entity_name?: string; entity_id?: string; limit?: number }) => {
+  // Audit Events (UC-09)
+  getAuditEvents: (params?: {
+    entity_name?: string;
+    entity_id?: string;
+    action?: string;
+    actor?: string;
+    date_from?: string;
+    date_to?: string;
+    q?: string;
+    limit?: number;
+  }) => {
     const q = new URLSearchParams();
     if (params?.entity_name) q.set("entity_name", params.entity_name);
     if (params?.entity_id) q.set("entity_id", params.entity_id);
+    if (params?.action) q.set("action", params.action);
+    if (params?.actor) q.set("actor", params.actor);
+    if (params?.date_from) q.set("date_from", params.date_from);
+    if (params?.date_to) q.set("date_to", params.date_to);
+    if (params?.q) q.set("q", params.q);
     if (params?.limit) q.set("limit", String(params.limit));
     return request<any[]>(`/api/v1/audit/events?${q.toString()}`).catch(() => []);
   },
@@ -702,8 +716,9 @@ export const apiClient = {
   getPackageAudit: (packageId: string) =>
     request<any[]>(`/api/v1/packages/${packageId}/audit`).catch(() => []),
 
-  // Master Data Management
-  getSchools: () => request<any[]>("/api/v1/masters/schools"),
+  // Master Data Management (FR-01 / UC-01)
+  getSchools: (activeOnly?: boolean) =>
+    request<any[]>(`/api/v1/masters/schools${activeOnly ? "?active_only=true" : ""}`),
 
   createSchool: (payload: {
     name: string;
@@ -832,6 +847,166 @@ export const apiClient = {
     request<any>(`/api/v1/masters/schools/${schoolId}/officials/${officialId}`, {
       method: "DELETE",
     }),
+
+  deleteSchool: (id: string) =>
+    request<any>(`/api/v1/masters/schools/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Katalog Barang / Items (FR-01 / UC-01)
+  getItems: (params?: { active_only?: boolean; q?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.active_only) qs.set("active_only", "true");
+    if (params?.q) qs.set("q", params.q);
+    const queryStr = qs.toString();
+    return request<any[]>(`/api/v1/masters/items${queryStr ? `?${queryStr}` : ""}`);
+  },
+
+  createItem: (payload: any) =>
+    request<any>("/api/v1/masters/items", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateItem: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/items/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  updateItemPrice: (id: string, reference_price: number) =>
+    request<any>(`/api/v1/masters/items/${id}/price`, {
+      method: "PATCH",
+      body: JSON.stringify({ reference_price }),
+    }),
+
+  deleteItem: (id: string) =>
+    request<any>(`/api/v1/masters/items/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Units
+  getUnits: () => request<any[]>("/api/v1/masters/units"),
+
+  createUnit: (payload: any) =>
+    request<any>("/api/v1/masters/units", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateUnit: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/units/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteUnit: (id: string) =>
+    request<any>(`/api/v1/masters/units/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Budget Classifications (Kode Rekening & Kegiatan BOS/BOP)
+  getBudgets: (params?: { active_only?: boolean; funding_scheme?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.active_only) qs.set("active_only", "true");
+    if (params?.funding_scheme) qs.set("funding_scheme", params.funding_scheme);
+    const queryStr = qs.toString();
+    return request<any[]>(`/api/v1/masters/budgets${queryStr ? `?${queryStr}` : ""}`);
+  },
+
+  createBudget: (payload: any) =>
+    request<any>("/api/v1/masters/budgets", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateBudget: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/budgets/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteBudget: (id: string) =>
+    request<any>(`/api/v1/masters/budgets/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Funding Sources
+  getFundingSources: () => request<any[]>("/api/v1/masters/funding-sources"),
+
+  createFundingSource: (payload: any) =>
+    request<any>("/api/v1/masters/funding-sources", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateFundingSource: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/funding-sources/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteFundingSource: (id: string) =>
+    request<any>(`/api/v1/masters/funding-sources/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Package Profiles & Template Registry (FR-03 / UC-03)
+  getPackageProfiles: () => request<any[]>("/api/v1/masters/package-profiles"),
+
+  updatePackageProfile: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/package-profiles/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  getTemplates: (fundingScheme?: string) => {
+    const qs = fundingScheme && fundingScheme !== "ALL" ? `?funding_scheme=${fundingScheme}` : "";
+    return request<any[]>(`/api/v1/masters/templates${qs}`);
+  },
+
+  updateTemplateConfig: (docCode: string, payload: any) =>
+    request<any>(`/api/v1/masters/templates/${docCode}/config`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  validateTemplate: (docCode: string, file?: File) => {
+    if (file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<any>(`/api/v1/masters/templates/${docCode}/validate`, {
+        method: "POST",
+        body: formData,
+      });
+    }
+    return request<any>(`/api/v1/masters/templates/${docCode}/validate`, {
+      method: "POST",
+    });
+  },
+
+  uploadTemplate: (docCode: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request<any>(`/api/v1/masters/templates/${docCode}/upload`, {
+      method: "POST",
+      body: formData,
+    });
+  },
+
+  simulateTemplate: (docCode: string, file?: File) => {
+    if (file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<any>(`/api/v1/masters/templates/${docCode}/simulate`, {
+        method: "POST",
+        body: formData,
+      });
+    }
+    return request<any>(`/api/v1/masters/templates/${docCode}/simulate`, {
+      method: "POST",
+    });
+  },
 
   getTaxPolicies: () => request<any[]>("/api/v1/masters/tax-policies"),
 };

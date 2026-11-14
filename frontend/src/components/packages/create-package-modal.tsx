@@ -30,11 +30,13 @@ export function CreatePackageModal({
 }: CreatePackageModalProps) {
   const [schools, setSchools] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
+  const [budgets, setBudgets] = useState<any[]>([]);
   const [isLoadingMasters, setIsLoadingMasters] = useState(false);
 
   // Form states
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>("");
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
+  const [selectedBudgetId, setSelectedBudgetId] = useState<string>("");
   const [fiscalYear, setFiscalYear] = useState<number>(2026);
   const [quarter, setQuarter] = useState<number>(2);
   const [fundSource, setFundSource] = useState<string>("BOS_REGULER");
@@ -58,17 +60,22 @@ export function CreatePackageModal({
       setIsLoadingMasters(true);
       setErrorMsg(null);
       try {
-        const [schoolsData, companiesData] = await Promise.all([
-          apiClient.getSchools().catch(() => []),
+        const [schoolsData, companiesData, budgetsData] = await Promise.all([
+          apiClient.getSchools(true).catch(() => []),
           apiClient.getCompanies().catch(() => []),
+          apiClient.getBudgets({ active_only: true }).catch(() => []),
         ]);
         setSchools(schoolsData || []);
         setCompanies(companiesData || []);
+        setBudgets(budgetsData || []);
         if (schoolsData && schoolsData.length > 0) {
           setSelectedSchoolId(schoolsData[0].id);
         }
         if (companiesData && companiesData.length > 0) {
           setSelectedCompanyId(companiesData[0].id);
+        }
+        if (budgetsData && budgetsData.length > 0) {
+          setSelectedBudgetId(budgetsData[0].id);
         }
       } catch (err: any) {
         setErrorMsg("Gagal memuat master data sekolah.");
@@ -120,9 +127,13 @@ export function CreatePackageModal({
         school_id: selectedSchoolId,
         fiscal_year: fiscalYear,
         quarter: quarter,
+        fund_source: fundSource,
       };
       if (selectedCompanyId) {
         payload.company_id = selectedCompanyId;
+      }
+      if (selectedBudgetId) {
+        payload.budget_id = selectedBudgetId;
       }
       if (customPackageNumber.trim()) {
         payload.package_number = customPackageNumber.trim();
@@ -329,21 +340,41 @@ export function CreatePackageModal({
             </div>
           </div>
 
-          {/* 3. Funding Source */}
-          <div>
-            <label className="block text-[11px] font-mono text-muted-foreground uppercase mb-1 font-semibold">
-              Sumber Dana Anggaran
-            </label>
-            <select
-              value={fundSource}
-              onChange={(e) => setFundSource(e.target.value)}
-              className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono text-[11px]"
-            >
-              <option value="BOS_REGULER">BOS Reguler (Bantuan Operasional Sekolah)</option>
-              <option value="BOS_KINERJA">BOS Kinerja</option>
-              <option value="BOP">BOP (Bantuan Operasional Pendidikan)</option>
-              <option value="LAINNYA">Lainnya / Swakelola</option>
-            </select>
+          {/* 3. Funding Source & Budget Classification (FR-01) */}
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="block text-[11px] font-mono text-muted-foreground uppercase mb-1 font-semibold">
+                Sumber Dana Anggaran
+              </label>
+              <select
+                value={fundSource}
+                onChange={(e) => setFundSource(e.target.value)}
+                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono text-[11px]"
+              >
+                <option value="BOS_REGULER">BOS Reguler (Bantuan Operasional Sekolah)</option>
+                <option value="BOS_KINERJA">BOS Kinerja</option>
+                <option value="BOP">BOP (Bantuan Operasional Pendidikan)</option>
+                <option value="LAINNYA">Lainnya / Swakelola</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-mono text-muted-foreground uppercase mb-1 font-semibold">
+                Kegiatan &amp; Kode Rekening Belanja BOS/BOP (Opsional)
+              </label>
+              <select
+                value={selectedBudgetId}
+                onChange={(e) => setSelectedBudgetId(e.target.value)}
+                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-sans"
+              >
+                <option value="">-- Tidak Ditautkan / Pilih Nanti --</option>
+                {budgets.map((bg) => (
+                  <option key={bg.id} value={bg.id}>
+                    [{bg.account_code || bg.activity_code || bg.funding_scheme}] {bg.activity_name} — {bg.account_name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* 4. Optional Custom Package Number */}
