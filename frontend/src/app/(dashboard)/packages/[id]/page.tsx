@@ -328,7 +328,12 @@ export default function PackageWorkspacePage() {
         )}
 
         {activeTab === "documents" && (
-          <TabDocuments revision={latestRevision} isReadOnly={isReadOnly} />
+          <TabDocuments
+            revision={latestRevision}
+            packageData={packageData}
+            currentRole={currentRole}
+            isReadOnly={isReadOnly}
+          />
         )}
 
         {activeTab === "audit" && (

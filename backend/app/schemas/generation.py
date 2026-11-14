@@ -41,5 +41,8 @@ class ArtifactResponse(BaseModel):
     sha256_hash: str
     is_draft: bool
     archive_status: str
+    drive_file_id: Optional[str] = None
+    drive_web_view_link: Optional[str] = None
+    drive_synced_at: Optional[datetime] = None
     created_at: datetime
     download_url: Optional[str] = None

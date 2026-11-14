@@ -89,7 +89,7 @@ async def _register_artifact(
             file_size=size_bytes,
             sha256_hash=sha256_hex,
             is_draft=is_draft,
-            archive_status="SYNCED",
+            archive_status="PENDING",
         )
     )
 
@@ -131,12 +131,16 @@ async def run_generation_job(
             if not revision:
                 raise ValueError(f"Revision {job.revision_id} associated with job {job_id} not found.")
 
-            # Determine draft status: Draft if not locked or package not approved
+            # Determine draft status: Draft if not locked or neither revision nor package approved/issued
             if is_draft_override is not None:
                 is_draft = is_draft_override
             else:
-                pkg_status = revision.package.status if revision.package else "DRAFT"
-                is_draft = not (revision.is_locked and pkg_status in ["APPROVED", "ISSUED"])
+                rev_status = (revision.status or "DRAFT").upper()
+                pkg_status = (revision.package.status if revision.package else "DRAFT").upper()
+                is_draft = not (
+                    revision.is_locked
+                    and (rev_status in ["APPROVED", "ISSUED"] or pkg_status in ["APPROVED", "ISSUED"])
+                )
 
             # Normalize requested formats
             if not formats:

@@ -1,7 +1,7 @@
 import { UserRole, PackageItem, PackageRevision, RevisionLine } from "@/types/package";
 import { ValidationRun } from "@/types/validation";
 import { LogisticsRecord, EvidenceAttachment } from "@/types/logistics";
-import { Artifact, GenerationJob } from "@/types/documents";
+import { Artifact, GenerationJob, ArchiveRecord } from "@/types/documents";
 import {
   SemanticAuditResponse,
   AIFixRecommendationResponse,
@@ -1015,5 +1015,21 @@ export const apiClient = {
   },
 
   getTaxPolicies: () => request<any[]>("/api/v1/masters/tax-policies"),
+
+  // Google Drive Archive Sync
+  getRevisionArchive: (revisionId: string) =>
+    request<ArchiveRecord | null>(`/api/v1/revisions/${revisionId}/archive`),
+
+  triggerRevisionDriveUpload: (revisionId: string) =>
+    request<ArchiveRecord>(`/api/v1/revisions/${revisionId}/archive/upload`, {
+      method: "POST",
+    }),
+
+  getDriveHealth: () => request<any>("/api/v1/archive/health"),
+
+  disconnectDriveOAuth: () =>
+    request<any>("/api/v1/archive/oauth/disconnect", {
+      method: "POST",
+    }),
 };
 

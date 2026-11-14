@@ -30,6 +30,15 @@ def _sync_ensure_schema_columns(sync_conn):
         ("budget_classifications", "funding_scheme", "ALTER TABLE budget_classifications ADD COLUMN funding_scheme VARCHAR(32) DEFAULT 'BOS_REGULER' NOT NULL"),
         ("budget_classifications", "is_active", "ALTER TABLE budget_classifications ADD COLUMN is_active BOOLEAN DEFAULT TRUE NOT NULL"),
         ("funding_sources", "is_active", "ALTER TABLE funding_sources ADD COLUMN is_active BOOLEAN DEFAULT TRUE NOT NULL"),
+        ("archive_records", "drive_folder_url", "ALTER TABLE archive_records ADD COLUMN drive_folder_url VARCHAR(512)"),
+        ("archive_records", "progress_percent", "ALTER TABLE archive_records ADD COLUMN progress_percent INTEGER DEFAULT 0 NOT NULL"),
+        ("archive_records", "current_step", "ALTER TABLE archive_records ADD COLUMN current_step VARCHAR(255)"),
+        ("archive_records", "uploaded_files", "ALTER TABLE archive_records ADD COLUMN uploaded_files INTEGER DEFAULT 0 NOT NULL"),
+        ("archive_records", "total_files", "ALTER TABLE archive_records ADD COLUMN total_files INTEGER DEFAULT 0 NOT NULL"),
+        ("archive_records", "total_bytes", "ALTER TABLE archive_records ADD COLUMN total_bytes INTEGER DEFAULT 0 NOT NULL"),
+        ("artifacts", "drive_file_id", "ALTER TABLE artifacts ADD COLUMN drive_file_id VARCHAR(128)"),
+        ("artifacts", "drive_web_view_link", "ALTER TABLE artifacts ADD COLUMN drive_web_view_link VARCHAR(512)"),
+        ("artifacts", "drive_synced_at", "ALTER TABLE artifacts ADD COLUMN drive_synced_at TIMESTAMP WITH TIME ZONE"),
     ]
     for table_name, col_name, stmt in migrations:
         if table_name in existing_tables:

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { PackageRevision } from "@/types/package";
-import { Artifact, GenerationJob } from "@/types/documents";
+import { PackageItem, PackageRevision, UserRole } from "@/types/package";
+import { ArchiveRecord, Artifact, GenerationJob } from "@/types/documents";
 import { apiClient } from "@/lib/api-client";
 import {
   FileText,
@@ -23,10 +23,19 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  Cloud,
+  CloudUpload,
+  FolderOpen,
+  Lock,
+  ShieldCheck,
+  Link2,
+  Unlink,
 } from "lucide-react";
 
 interface TabDocumentsProps {
   revision: PackageRevision;
+  packageData?: PackageItem;
+  currentRole?: UserRole;
   isReadOnly: boolean;
 }
 
@@ -61,27 +70,49 @@ interface PipelineStep {
   icon: typeof Cpu;
 }
 
-export function TabDocuments({ revision }: TabDocumentsProps) {
+export function TabDocuments({ revision, packageData, currentRole }: TabDocumentsProps) {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [currentJob, setCurrentJob] = useState<GenerationJob | null>(null);
+  const [archiveRecord, setArchiveRecord] = useState<ArchiveRecord | null>(null);
+  const [driveHealth, setDriveHealth] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploadingDrive, setIsUploadingDrive] = useState(false);
+  const [isDisconnectingOAuth, setIsDisconnectingOAuth] = useState(false);
   const [triggerError, setTriggerError] = useState<string | null>(null);
+  const [driveUploadError, setDriveUploadError] = useState<string | null>(null);
   const [selectedPdfCode, setSelectedPdfCode] = useState<string>("MERGED_PDF");
   const [isPdfFullscreen, setIsPdfFullscreen] = useState(false);
   const pdfViewerRef = useRef<HTMLDivElement | null>(null);
 
-  const isDraft = revision.status === "DRAFT" || revision.status === "UNDER_REVIEW";
+  const isDraft =
+    revision.status === "DRAFT" ||
+    revision.status === "UNDER_REVIEW" ||
+    revision.status === "RETURNED";
+  const isApprovedForDrive =
+    revision.status === "APPROVED" || revision.status === "ISSUED";
+  const canTriggerDriveUpload =
+    !currentRole ||
+    currentRole === "ADMINISTRATION" ||
+    currentRole === "SYSTEM_ADMINISTRATOR";
+
+  const schoolName = revision.school_snapshot?.name || "Sekolah";
+  const fiscalYear = packageData?.fiscal_year || new Date().getFullYear();
+  const quarterNum = packageData?.quarter || 1;
 
   const loadState = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [artsData, latestJob] = await Promise.all([
+      const [artsData, latestJob, archData, healthData] = await Promise.all([
         apiClient.getArtifacts(revision.id),
         apiClient.getLatestGenerationJob(revision.id),
+        apiClient.getRevisionArchive(revision.id).catch(() => null),
+        apiClient.getDriveHealth().catch(() => null),
       ]);
       setArtifacts(artsData);
       setCurrentJob(latestJob);
+      setArchiveRecord(archData);
+      setDriveHealth(healthData);
     } catch {
       setArtifacts([]);
     } finally {
@@ -92,6 +123,23 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
   useEffect(() => {
     loadState();
   }, [loadState]);
+
+  useEffect(() => {
+    const refreshDriveHealth = () => {
+      apiClient.getDriveHealth().then(setDriveHealth).catch(() => {});
+    };
+    const onMessage = (ev: MessageEvent) => {
+      if (ev?.data?.type === "gdrive-oauth-connected") {
+        refreshDriveHealth();
+      }
+    };
+    window.addEventListener("focus", refreshDriveHealth);
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("focus", refreshDriveHealth);
+      window.removeEventListener("message", onMessage);
+    };
+  }, []);
 
   // Poll job status & incremental artifacts while job is QUEUED or RUNNING
   const activeJobId =
@@ -155,6 +203,74 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
       setTriggerError(err?.message || "Gagal memicu pembuatan dokumen.");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Poll Google Drive upload progress while archiveRecord.status === "SYNCING"
+  const isDriveSyncing = archiveRecord?.status === "SYNCING";
+  useEffect(() => {
+    if (!isDriveSyncing) {
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const pollDrive = async () => {
+      try {
+        const [updatedArchive, updatedArtifacts] = await Promise.all([
+          apiClient.getRevisionArchive(revision.id),
+          apiClient.getArtifacts(revision.id).catch(() => null),
+        ]);
+        if (cancelled) return;
+
+        if (updatedArtifacts) {
+          setArtifacts(updatedArtifacts);
+        }
+        setArchiveRecord(updatedArchive);
+
+        if (updatedArchive && updatedArchive.status === "SYNCING") {
+          timer = setTimeout(pollDrive, 600);
+        }
+      } catch {
+        if (!cancelled) {
+          timer = setTimeout(pollDrive, 1000);
+        }
+      }
+    };
+
+    timer = setTimeout(pollDrive, 600);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [isDriveSyncing, revision.id]);
+
+  const handleTriggerDriveUpload = async () => {
+    setIsUploadingDrive(true);
+    setDriveUploadError(null);
+    try {
+      const rec = await apiClient.triggerRevisionDriveUpload(revision.id);
+      setArchiveRecord(rec);
+    } catch (err: any) {
+      setDriveUploadError(err?.message || "Gagal memulai unggah ke Google Drive.");
+    } finally {
+      setIsUploadingDrive(false);
+    }
+  };
+
+  const handleDisconnectDriveOAuth = async () => {
+    setIsDisconnectingOAuth(true);
+    setDriveUploadError(null);
+    try {
+      await apiClient.disconnectDriveOAuth();
+      const updated = await apiClient.getDriveHealth().catch(() => null);
+      setDriveHealth(updated);
+    } catch (err: any) {
+      setDriveUploadError(err?.message || "Gagal memutus koneksi OAuth Google Drive.");
+    } finally {
+      setIsDisconnectingOAuth(false);
     }
   };
 
@@ -620,6 +736,357 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
         )}
       </div>
 
+      {/* Google Drive Integration & Upload Progress Card */}
+      {(() => {
+        const drivePct = archiveRecord?.progress_percent ?? 0;
+        const driveUploaded = archiveRecord?.uploaded_files ?? 0;
+        const driveTotal = archiveRecord?.total_files || totalArtifactsCount;
+        const driveStatus = archiveRecord?.status;
+        const isDriveSynced = driveStatus === "SYNCED";
+        const isDriveFailed = driveStatus === "FAILED";
+        const isDriveSuperseded = driveStatus === "SUPERSEDED";
+
+        const dStep1Done = isDriveSyncing ? drivePct >= 10 : isDriveSynced;
+        const dStep1Active = isDriveSyncing && !dStep1Done;
+        const dStep2Done = isDriveSyncing ? drivePct >= 20 : isDriveSynced;
+        const dStep2Active = isDriveSyncing && dStep1Done && !dStep2Done;
+        const dStep3Done = isDriveSyncing ? drivePct >= 98 : isDriveSynced;
+        const dStep3Active = isDriveSyncing && dStep2Done && !dStep3Done;
+        const dStep4Done = isDriveSynced;
+        const dStep4Active = isDriveSyncing && dStep3Done && !dStep4Done;
+
+        const driveSteps = [
+          { key: "auth", label: "1. Autentikasi API", done: dStep1Done, active: dStep1Active, failed: isDriveFailed && drivePct < 10 },
+          { key: "folders", label: "2. Folder Lv1–Lv3", done: dStep2Done, active: dStep2Active, failed: isDriveFailed && drivePct >= 10 && drivePct < 20 },
+          { key: "upload", label: `3. Unggah & Timpa (${driveUploaded}/${driveTotal})`, done: dStep3Done, active: dStep3Active, failed: isDriveFailed && drivePct >= 20 && drivePct < 98 },
+          { key: "done", label: "4. Selesai & Tautan Drive", done: dStep4Done, active: dStep4Active, failed: isDriveFailed && drivePct >= 98 },
+        ];
+
+        const uploadButtonLabel = isDriveSyncing
+          ? `Mengunggah ke Drive (${drivePct}%)...`
+          : isUploadingDrive
+          ? "Memulai Unggah..."
+          : isDriveSynced || revision.revision_number > 1
+          ? `Timpa / Perbarui di Google Drive (Rev-${revision.revision_number})`
+          : "Unggah Paket ke Google Drive";
+
+        const isLiveDrive = driveHealth?.mode === "live";
+        const canUploadBinary = !isLiveDrive || Boolean(driveHealth?.can_upload_binary);
+        const oauthLoginUrl =
+          typeof window !== "undefined"
+            ? `${window.location.protocol}//${window.location.hostname}:8000/api/v1/archive/oauth/login`
+            : "http://localhost:8000/api/v1/archive/oauth/login";
+
+        return (
+          <div className="border border-border rounded-lg bg-card p-4 space-y-4 shadow-xs">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1 min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  {isDriveSyncing ? (
+                    <Loader2 className="w-4 h-4 text-sky-500 animate-spin flex-shrink-0" />
+                  ) : isDriveSynced ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                  ) : isDriveFailed ? (
+                    <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                  ) : !isApprovedForDrive ? (
+                    <Lock className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                  ) : (
+                    <Cloud className="w-4 h-4 text-sky-500 flex-shrink-0" />
+                  )}
+                  <h4 className="text-xs font-bold uppercase tracking-wider font-mono text-foreground">
+                    Integrasi Penyimpanan Google Drive
+                  </h4>
+                  <span
+                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                      isDriveSyncing
+                        ? "bg-sky-500/15 text-sky-600 dark:text-sky-300 border-sky-500/40"
+                        : isDriveSynced
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/40"
+                        : isDriveFailed
+                        ? "bg-red-500/15 text-red-600 dark:text-red-300 border-red-500/40"
+                        : isDriveSuperseded
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/40"
+                        : "bg-muted text-muted-foreground border-border"
+                    }`}
+                  >
+                    {isDriveSyncing
+                      ? "MENGUNGGAH KE DRIVE"
+                      : isDriveSynced
+                      ? "TERSIMPAN DI DRIVE"
+                      : isDriveFailed
+                      ? "GAGAL UNGGAH"
+                      : isDriveSuperseded
+                      ? "DIGANTIKAN REVISI BARU"
+                      : isApprovedForDrive
+                      ? "SIAP DIUNGGAH"
+                      : "MENUNGGU APPROVAL"}
+                  </span>
+                  {driveHealth && (
+                    <span
+                      className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded border ${
+                        !isLiveDrive
+                          ? "bg-muted text-muted-foreground border-border"
+                          : canUploadBinary
+                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                          : "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                      }`}
+                    >
+                      {!isLiveDrive
+                        ? "Simulasi Lokal"
+                        : driveHealth.oauth_connected
+                        ? `OAuth 2.0: ${driveHealth.connected_email || "Terhubung"}`
+                        : driveHealth.is_shared_drive
+                        ? "Shared Drive"
+                        : "Service Account (Kuota 0 B)"}
+                    </span>
+                  )}
+                </div>
+
+                {/* 4-Level Folder Structure Preview */}
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono text-muted-foreground pt-1">
+                  <span className="px-1.5 py-0.5 rounded bg-muted border border-border text-foreground font-semibold">
+                    Lv1: {schoolName}
+                  </span>
+                  <span>→</span>
+                  <span className="px-1.5 py-0.5 rounded bg-muted border border-border text-foreground font-semibold">
+                    Lv2: {fiscalYear}
+                  </span>
+                  <span>→</span>
+                  <span className="px-1.5 py-0.5 rounded bg-muted border border-border text-foreground font-semibold">
+                    Lv3: Triwulan {quarterNum}
+                  </span>
+                  <span>→</span>
+                  <span className="px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/30 text-sky-600 dark:text-sky-300 font-semibold">
+                    Lv4: Berkas Paket SPJ
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground pt-0.5">
+                  Dokumen hasil generate disimpan lokal terlebih dahulu. Jika terdapat revisi atau unggah ulang, berkas lama di folder <span className="font-mono text-foreground">Triwulan {quarterNum}</span> akan ditimpa (overwrite) secara otomatis.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                {isLiveDrive && driveHealth?.oauth_connected && canTriggerDriveUpload && (
+                  <button
+                    type="button"
+                    onClick={handleDisconnectDriveOAuth}
+                    disabled={isDisconnectingOAuth || isDriveSyncing}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-border bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground font-semibold text-xs transition disabled:opacity-50"
+                    title="Putuskan sesi OAuth 2.0 Google Drive"
+                  >
+                    {isDisconnectingOAuth ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Unlink className="w-3.5 h-3.5" />
+                    )}
+                    <span>Putuskan OAuth</span>
+                  </button>
+                )}
+
+                {isLiveDrive && !canUploadBinary && driveHealth?.oauth_client_configured && canTriggerDriveUpload && (
+                  <a
+                    href={oauthLoginUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 font-semibold text-xs transition"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    <span>Hubungkan Akun Google (OAuth 2.0)</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+
+                {isDriveSynced && archiveRecord?.drive_folder_url && (
+                  <a
+                    href={archiveRecord.drive_folder_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 font-semibold text-xs transition"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    <span>Buka Folder Google Drive</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+
+                {isApprovedForDrive && canTriggerDriveUpload && (
+                  <button
+                    type="button"
+                    onClick={handleTriggerDriveUpload}
+                    disabled={
+                      isUploadingDrive ||
+                      isDriveSyncing ||
+                      isJobActive ||
+                      totalArtifactsCount === 0 ||
+                      !canUploadBinary
+                    }
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={
+                      !canUploadBinary
+                        ? "Hubungkan akun Google OAuth 2.0 terlebih dahulu agar berkas tidak 0 byte"
+                        : totalArtifactsCount === 0
+                        ? "Klik 'Hasilkan Seluruh Dokumen (Generate)' terlebih dahulu sebelum mengunggah ke Drive"
+                        : "Unggah seluruh berkas paket ke Google Drive"
+                    }
+                  >
+                    {isUploadingDrive || isDriveSyncing ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <CloudUpload className="w-3.5 h-3.5" />
+                    )}
+                    <span>{uploadButtonLabel}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* OAuth 2.0 / Storage Quota requirement notice */}
+            {isLiveDrive && !canUploadBinary && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 flex items-start gap-2 text-amber-800 dark:text-amber-300 font-mono text-[11px]">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div>
+                    <strong>Kuota Service Account = 0 Byte pada My Drive Pribadi:</strong>{" "}
+                    Google melarang Service Account mengunggah isi berkas ke folder Google Drive pribadi (hasilnya akan gagal atau 0 byte).
+                  </div>
+                  {driveHealth?.oauth_client_configured ? (
+                    <div>
+                      Klik tombol <strong>Hubungkan Akun Google (OAuth 2.0)</strong> di kanan atas untuk login dengan akun pemilik folder Google Drive (<span className="underline">pastikan redirect URI terpasang</span>), lalu kembali ke tab ini.
+                    </div>
+                  ) : (
+                    <div>
+                      Simpan OAuth 2.0 Client ID JSON (tipe Web application, Redirect URI{" "}
+                      <code>http://localhost:8000/api/v1/archive/oauth/callback</code>) ke{" "}
+                      <code>backend/credentials/gdrive-oauth-client.json</code> agar tombol koneksi muncul otomatis.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Gate notices */}
+            {!isApprovedForDrive && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 flex items-center gap-2 text-amber-700 dark:text-amber-300 font-mono text-[11px]">
+                <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>
+                  Terkunci: Paket pengadaan harus berstatus <strong>Disetujui (APPROVED)</strong> oleh Direktur Keuangan sebelum Admin / SysAdmin dapat mengunggah ke Google Drive.
+                </span>
+              </div>
+            )}
+
+            {isApprovedForDrive && !canTriggerDriveUpload && (
+              <div className="rounded-md border border-border bg-muted/40 p-2.5 flex items-center gap-2 text-muted-foreground font-mono text-[11px]">
+                <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>
+                  Hanya peran <strong>Admin (ADMINISTRATION)</strong> atau <strong>SysAdmin (SYSTEM_ADMINISTRATOR)</strong> yang dapat memicu unggah ke Google Drive.
+                </span>
+              </div>
+            )}
+
+            {isApprovedForDrive && canTriggerDriveUpload && totalArtifactsCount === 0 && (
+              <div className="rounded-md border border-border bg-muted/30 p-2.5 flex items-center gap-2 text-muted-foreground font-mono text-[11px]">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>
+                  Klik <strong>Hasilkan Seluruh Dokumen (Generate)</strong> di atas terlebih dahulu agar berkas lokal tersedia untuk diunggah ke Google Drive.
+                </span>
+              </div>
+            )}
+
+            {(driveUploadError || (isDriveFailed && archiveRecord?.last_error)) && (
+              <div className="rounded-md border border-red-500/40 bg-red-500/10 p-2.5 flex items-start justify-between gap-2 text-red-700 dark:text-red-300 font-mono text-[11px]">
+                <div className="flex items-start gap-2 min-w-0">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                  <span className="break-words">
+                    {driveUploadError || archiveRecord?.last_error}
+                  </span>
+                </div>
+                {driveUploadError && (
+                  <button
+                    type="button"
+                    onClick={() => setDriveUploadError(null)}
+                    className="p-0.5 rounded hover:bg-red-500/20"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Progress Report Section (shown once upload started or synced/failed) */}
+            {archiveRecord && (archiveRecord.status !== "PENDING" || archiveRecord.attempt_count > 0) && (
+              <div className="space-y-3 pt-1 border-t border-border/70">
+                <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[11px]">
+                  <span className="text-muted-foreground truncate">
+                    {archiveRecord.current_step || "Menunggu proses unggah..."}
+                  </span>
+                  <span className="font-bold text-foreground tabular-nums">
+                    {drivePct}% • {driveUploaded} / {driveTotal} Berkas
+                  </span>
+                </div>
+
+                <div
+                  className="h-2 w-full rounded-full bg-muted overflow-hidden border border-border/60"
+                  role="progressbar"
+                  aria-valuenow={drivePct}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div
+                    className={`h-full transition-all duration-300 ease-out rounded-full ${
+                      isDriveSynced
+                        ? "bg-emerald-500"
+                        : isDriveFailed
+                        ? "bg-red-500"
+                        : "bg-sky-500 animate-pulse"
+                    }`}
+                    style={{ width: `${drivePct}%` }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {driveSteps.map((st) => (
+                    <div
+                      key={st.key}
+                      className={`rounded border px-2.5 py-1.5 font-mono text-[10px] flex items-center justify-between gap-1.5 ${
+                        st.done
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                          : st.active
+                          ? "border-sky-500/50 bg-sky-500/10 text-sky-700 dark:text-sky-300 font-semibold"
+                          : st.failed
+                          ? "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
+                          : "border-border bg-muted/20 text-muted-foreground"
+                      }`}
+                    >
+                      <span className="truncate">{st.label}</span>
+                      {st.done ? (
+                        <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+                      ) : st.active ? (
+                        <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                      ) : st.failed ? (
+                        <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      ) : (
+                        <Clock className="w-3 h-3 flex-shrink-0 opacity-50" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {archiveRecord.synced_at && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-muted-foreground">
+                    <span>Path Drive: {archiveRecord.folder_path}</span>
+                    <span>
+                      Terakhir Disinkronkan:{" "}
+                      {new Date(archiveRecord.synced_at).toLocaleString("id-ID")}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* 13-Document Registry Table */}
       <div className="border border-border rounded-lg bg-card overflow-hidden">
         <table className="w-full text-left border-collapse text-xs">
@@ -785,6 +1252,26 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
                           ZIP
                         </a>
                       )}
+                      {(() => {
+                        const driveUrl =
+                          pdfArt?.drive_web_view_link ||
+                          docxArt?.drive_web_view_link ||
+                          xlsxArt?.drive_web_view_link ||
+                          zipArt?.drive_web_view_link;
+                        if (!driveUrl) return null;
+                        return (
+                          <a
+                            href={driveUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-600 dark:text-sky-300 border border-sky-500/30 text-[10px] font-bold transition"
+                            title="Buka berkas di Google Drive"
+                          >
+                            <span>Drive</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        );
+                      })()}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-center">

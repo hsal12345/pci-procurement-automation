@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     AI_COST_PER_1K_PROMPT_USD: float = 0.0
     AI_COST_PER_1K_COMPLETION_USD: float = 0.0
 
+    # Google Drive Storage Integration
+    DRIVE_SYNC_ENABLED: bool = True
+    DRIVE_SYNC_MODE: str = "auto"  # "auto", "live", "mock"
+    GOOGLE_DRIVE_CREDENTIALS_PATH: str = "credentials/gdrive-service-account.json"
+    GOOGLE_DRIVE_FOLDER_ID_PATH: str = "credentials/gdrive-folder-id.txt"
+    GOOGLE_DRIVE_OAUTH_CLIENT_PATH: str = "credentials/gdrive-oauth-client.json"
+    GOOGLE_DRIVE_OAUTH_TOKEN_PATH: str = "credentials/gdrive-oauth-token.json"
+    GOOGLE_DRIVE_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/v1/archive/oauth/callback"
+    GOOGLE_DRIVE_ROOT_FOLDER_ID: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -85,6 +95,40 @@ class Settings(BaseSettings):
         elif provider == "ollama":
             return "http://localhost:11434/v1"
         return "https://api.openai.com/v1"
+
+    def get_drive_credentials_path(self) -> Path:
+        p = Path(self.GOOGLE_DRIVE_CREDENTIALS_PATH)
+        return p if p.is_absolute() else (self.BASE_DIR / p)
+
+    def get_drive_oauth_client_path(self) -> Path:
+        p = Path(self.GOOGLE_DRIVE_OAUTH_CLIENT_PATH)
+        return p if p.is_absolute() else (self.BASE_DIR / p)
+
+    def get_drive_oauth_token_path(self) -> Path:
+        p = Path(self.GOOGLE_DRIVE_OAUTH_TOKEN_PATH)
+        return p if p.is_absolute() else (self.BASE_DIR / p)
+
+    def is_drive_oauth_configured(self) -> bool:
+        return self.get_drive_oauth_token_path().exists()
+
+    def get_effective_drive_root_folder_id(self) -> Optional[str]:
+        if self.GOOGLE_DRIVE_ROOT_FOLDER_ID and self.GOOGLE_DRIVE_ROOT_FOLDER_ID.strip():
+            return self.GOOGLE_DRIVE_ROOT_FOLDER_ID.strip()
+        p = Path(self.GOOGLE_DRIVE_FOLDER_ID_PATH)
+        path = p if p.is_absolute() else (self.BASE_DIR / p)
+        if path.exists():
+            content = path.read_text(encoding="utf-8").strip()
+            if content:
+                return content
+        return None
+
+    def is_drive_live_configured(self) -> bool:
+        if not self.DRIVE_SYNC_ENABLED:
+            return False
+        if (self.DRIVE_SYNC_MODE or "").lower().strip() == "mock":
+            return False
+        has_auth = self.is_drive_oauth_configured() or self.get_drive_credentials_path().exists()
+        return has_auth and bool(self.get_effective_drive_root_folder_id())
 
 
 settings = Settings()
