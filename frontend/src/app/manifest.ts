@@ -17,20 +17,32 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       {
         src: "/favicon.ico",
-        sizes: "any",
+        sizes: "48x48 32x32 16x16",
         type: "image/x-icon",
       },
       {
         src: "/images/icon-192.png",
         sizes: "192x192",
         type: "image/png",
-        purpose: "maskable any" as any,
+        purpose: "any",
+      },
+      {
+        src: "/images/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "maskable",
       },
       {
         src: "/images/icon-512.png",
         sizes: "512x512",
         type: "image/png",
-        purpose: "maskable any" as any,
+        purpose: "any",
+      },
+      {
+        src: "/images/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
       },
     ],
     shortcuts: [
@@ -42,9 +54,16 @@ export default function manifest(): MetadataRoute.Manifest {
         icons: [{ src: "/images/icon-192.png", sizes: "192x192" }],
       },
       {
-        name: "Impor Spreadsheet",
+        name: "Katalog & Anggaran",
+        short_name: "Katalog",
+        description: "Kelola master katalog barang, harga acuan HPS, dan kode rekening",
+        url: "/catalog",
+        icons: [{ src: "/images/icon-192.png", sizes: "192x192" }],
+      },
+      {
+        name: "Impor Dokumen",
         short_name: "Impor",
-        description: "Unggah berkas Excel pengadaan",
+        description: "Unggah dokumen pengadaan (.xlsx, .pdf, .doc, .docx)",
         url: "/imports",
         icons: [{ src: "/images/icon-192.png", sizes: "192x192" }],
       },

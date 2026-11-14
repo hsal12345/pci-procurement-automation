@@ -1,18 +1,28 @@
+import asyncio
+import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.api.deps import get_current_actor_name, get_current_user_role
 from app.config import settings
-from app.database import get_db
+from app.database import AsyncSessionLocal, get_db
 from app.models.imports import ImportRecord
 from app.models.packages import PackageRevision
+from app.services.import_progress import import_progress_tracker
 from app.schemas.ai import (
     CandidateMappingProposal,
+    AIMappingSuggestRequest,
+    SemanticAuditRequest,
     SemanticAuditResponse,
+    UpdatePassingGradeRequest,
+    AIFixRecommendationResponse,
+    AIFixApplyRequest,
+    AIFixApplyResponse,
     AIUsageResponse,
     ManualReviewRecordRequest,
     ManualReviewRecordResponse,
@@ -30,6 +40,7 @@ from app.schemas.ai import (
 from app.schemas.common import UserRoleEnum
 from app.services.ai.mapping_assistant import AIMappingAssistant
 from app.services.ai.discrepancy_auditor import SemanticDiscrepancyAuditor
+from app.services.ai.autofix_assistant import AIAutoFixAssistant
 from app.services.ai.budget_guard import AIBudgetGuard
 from app.services.ai.runtime_manager import runtime_manager
 from app.services.ai.system_knowledge_service import system_knowledge_service
@@ -68,6 +79,10 @@ RECOMMENDED_MODELS: Dict[str, List[str]] = {
         "gpt-4o-mini",
         "gpt-4o",
         "gpt-3.5-turbo"
+    ],
+    "deepseek": [
+        "deepseek-chat",
+        "deepseek-reasoner"
     ],
     "ollama": [
         "llama3.2",
@@ -375,37 +390,160 @@ async def ai_playground_test(
 # Core Transaction Operations (Mapping & Discrepancy Audit)
 # =========================================================================
 
+def _resolve_import_workbook_path(rec: ImportRecord) -> Path:
+    upload_dir = settings.get_upload_dir()
+    meta = rec.sheet_metadata or {}
+    stored_filename = meta.get("stored_filename")
+    if stored_filename:
+        candidate = upload_dir / stored_filename
+        if candidate.exists():
+            return candidate
+
+    matching_files = list(upload_dir.glob(f"*_{rec.original_filename}"))
+    if matching_files:
+        return matching_files[0]
+
+    fallback_file = upload_dir / rec.original_filename
+    if fallback_file.exists():
+        return fallback_file
+
+    raise HTTPException(
+        status_code=404,
+        detail="Berkas fisik dokumen impor tidak ditemukan di penyimpanan server."
+    )
+
+
+async def _execute_mapping_and_persist(
+    db: AsyncSession,
+    rec: ImportRecord,
+    workbook_path: Path,
+    requested_sheet: Optional[str],
+    actor_name: str,
+):
+    proposal, status_code, err_msg = await AIMappingAssistant.suggest_mapping_for_workbook(
+        workbook_path=workbook_path,
+        db=db,
+        sheet_name=requested_sheet,
+        import_id=str(rec.id),
+        pre_extracted_payload=rec.candidate_payload,
+        upload_context=(rec.sheet_metadata or {}).get("upload_context"),
+    )
+
+    updated_meta = dict(rec.sheet_metadata or {})
+    updated_meta["progress"] = import_progress_tracker.get_state(str(rec.id), fallback_meta=updated_meta)
+
+    if not proposal:
+        updated_meta["ai_status"] = status_code or "UNAVAILABLE"
+        updated_meta["ai_error"] = err_msg or "Layanan AI tidak tersedia. Gunakan pemetaan kolom manual."
+        rec.sheet_metadata = updated_meta
+        await audit_service.log_event(
+            db=db,
+            entity_name="ImportRecord",
+            entity_id=str(rec.id),
+            action="AI_MAPPING_FALLBACK",
+            actor=actor_name,
+            after_state={"ai_status": status_code, "sheet_name": requested_sheet},
+            reason=err_msg or "Layanan AI tidak tersedia; dialihkan ke pemetaan kolom manual."
+        )
+        await db.commit()
+        return None, status_code, err_msg
+
+    updated_meta["ai_status"] = status_code or "COMPLETED"
+    updated_meta["ai_error"] = None
+    updated_meta["ai_mapping_proposal"] = proposal.model_dump()
+    rec.sheet_metadata = updated_meta
+    await audit_service.log_event(
+        db=db,
+        entity_name="ImportRecord",
+        entity_id=str(rec.id),
+        action="AI_MAPPING_PROPOSED",
+        actor=actor_name,
+        after_state={
+            "sheet_name": proposal.sheet_name,
+            "header_row_index": proposal.header_row_index,
+            "confidence_score": proposal.confidence_score,
+            "is_ambiguous": proposal.is_ambiguous,
+        },
+        reason="Usulan pemetaan kolom AI berhasil dihasilkan untuk ditinjau staf."
+    )
+    await db.commit()
+    return proposal, status_code, err_msg
+
+
+async def _run_async_mapping_job(
+    import_id: UUID,
+    workbook_path: Path,
+    requested_sheet: Optional[str],
+    actor_name: str,
+) -> None:
+    logger = logging.getLogger(__name__)
+    async with AsyncSessionLocal() as db:
+        try:
+            res = await db.execute(select(ImportRecord).where(ImportRecord.id == import_id))
+            rec = res.scalar_one_or_none()
+            if not rec:
+                import_progress_tracker.emit(
+                    str(import_id),
+                    stage="FINALIZE",
+                    percent=100,
+                    detail="Data impor tidak ditemukan saat menjalankan tugas latar belakang.",
+                    status="FAILED",
+                    error="ImportRecord not found",
+                )
+                return
+
+            await _execute_mapping_and_persist(
+                db=db,
+                rec=rec,
+                workbook_path=workbook_path,
+                requested_sheet=requested_sheet,
+                actor_name=actor_name,
+            )
+        except Exception as exc:
+            logger.exception(f"Background AI mapping failed for import {import_id}: {exc}")
+            import_progress_tracker.emit(
+                str(import_id),
+                stage="FINALIZE",
+                percent=100,
+                detail=f"Terjadi galat tak terduga saat pemetaan AI: {exc}",
+                status="FALLBACK",
+                error=str(exc),
+            )
+
+
 @router.post("/imports/{id}/suggest-mapping", response_model=CandidateMappingProposal)
 async def ai_suggest_mapping(
     id: UUID,
+    payload: Optional[AIMappingSuggestRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance)
+    actor_role: str = Depends(require_admin_or_finance),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Requests an intelligent candidate column mapping proposal from the advisory AI
-    for non-standard uploaded spreadsheets (PRD Section FR02 and FR05).
+    for uploaded procurement documents (.xlsx, .pdf, .docx, .doc) (FR02 & FR05 / SD-02 Step 3).
     """
     res = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
     rec = res.scalar_one_or_none()
     if not rec:
         raise HTTPException(status_code=404, detail=f"Data impor dengan ID {id} tidak ditemukan.")
 
-    upload_dir = settings.get_upload_dir()
-    matching_files = list(upload_dir.glob(f"*_{rec.original_filename}"))
-    if not matching_files:
-        fallback_file = upload_dir / rec.original_filename
-        if fallback_file.exists():
-            workbook_path = fallback_file
-        else:
-            raise HTTPException(
-                status_code=404,
-                detail="Berkas fisik spreadsheet tidak ditemukan di penyimpanan server."
-            )
-    else:
-        workbook_path = matching_files[0]
+    workbook_path = _resolve_import_workbook_path(rec)
+    requested_sheet = payload.sheet_name if payload and payload.sheet_name else (rec.sheet_metadata or {}).get("active_sheet")
+    cfg = runtime_manager.get_config()
+    import_progress_tracker.start_run(
+        str(rec.id),
+        source_format=(rec.sheet_metadata or {}).get("source_format"),
+        provider=cfg.provider,
+        model=cfg.model,
+        runtime_mode=cfg.runtime_mode,
+    )
 
-    proposal, status_code, err_msg = await AIMappingAssistant.suggest_mapping_for_workbook(
+    proposal, status_code, err_msg = await _execute_mapping_and_persist(
+        db=db,
+        rec=rec,
         workbook_path=workbook_path,
-        db=db
+        requested_sheet=requested_sheet,
+        actor_name=actor_name,
     )
 
     if not proposal:
@@ -422,22 +560,135 @@ async def ai_suggest_mapping(
     return proposal
 
 
+@router.post("/imports/{id}/suggest-mapping-async", status_code=status.HTTP_202_ACCEPTED)
+async def ai_suggest_mapping_async(
+    id: UUID,
+    payload: Optional[AIMappingSuggestRequest] = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_or_finance),
+    actor_name: str = Depends(get_current_actor_name),
+):
+    """Starts advisory AI column mapping in the background and streams real-time progress
+    via GET /api/v1/imports/{id}/progress/stream.
+    """
+    res = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
+    rec = res.scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail=f"Data impor dengan ID {id} tidak ditemukan.")
+
+    workbook_path = _resolve_import_workbook_path(rec)
+    requested_sheet = payload.sheet_name if payload and payload.sheet_name else (rec.sheet_metadata or {}).get("active_sheet")
+    cfg = runtime_manager.get_config()
+    initial_progress = import_progress_tracker.start_run(
+        str(rec.id),
+        source_format=(rec.sheet_metadata or {}).get("source_format"),
+        provider=cfg.provider,
+        model=cfg.model,
+        runtime_mode=cfg.runtime_mode,
+    )
+
+    asyncio.create_task(
+        _run_async_mapping_job(
+            import_id=rec.id,
+            workbook_path=workbook_path,
+            requested_sheet=requested_sheet,
+            actor_name=actor_name,
+        )
+    )
+
+    return {
+        "import_id": str(rec.id),
+        "status": "RUNNING",
+        "sheet_name": requested_sheet,
+        "provider": cfg.provider,
+        "model": cfg.model,
+        "runtime_mode": cfg.runtime_mode,
+        "progress": initial_progress,
+    }
+
+
 @router.post("/revisions/{id}/audit", response_model=SemanticAuditResponse)
 async def ai_audit_revision(
     id: UUID,
+    payload: Optional[SemanticAuditRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
     actor_role: str = Depends(require_admin_or_finance),
     actor_name: str = Depends(get_current_actor_name)
 ):
     """Performs cross-document semantic discrepancy auditing across revision items,
-    identifying brand substitutions, unit mismatches, or spec contradictions (PRD FR05, AT16).
+    judging all 13 SPJ documents by percentage against an adjustable passing grade (default 95%).
     """
+    passing_grade = payload.passing_grade if payload else 95.0
     audit_resp = await SemanticDiscrepancyAuditor.audit_revision(
         db=db,
         revision_id=id,
-        actor_name=actor_name
+        actor_name=actor_name,
+        passing_grade=passing_grade,
     )
     return audit_resp
+
+
+@router.get("/revisions/{id}/audit/latest", response_model=Optional[SemanticAuditResponse])
+async def get_latest_ai_audit(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieves the most recent persisted percentage-based AI semantic audit report."""
+    return await SemanticDiscrepancyAuditor.get_latest_report(db=db, revision_id=id)
+
+
+@router.patch("/revisions/{id}/audit/passing-grade", response_model=SemanticAuditResponse)
+async def update_ai_audit_passing_grade(
+    id: UUID,
+    payload: UpdatePassingGradeRequest,
+    db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_or_finance),
+):
+    """Adjusts the passing grade percentage on the latest semantic audit report and re-evaluates pass/fail."""
+    updated = await SemanticDiscrepancyAuditor.update_passing_grade(
+        db=db,
+        revision_id=id,
+        passing_grade=payload.passing_grade,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=404,
+            detail="Belum ada hasil Audit Teks AI tersimpan untuk revisi ini."
+        )
+    return updated
+
+
+@router.post("/revisions/{id}/fix-recommendations", response_model=AIFixRecommendationResponse)
+async def generate_ai_fix_recommendations(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_or_finance),
+):
+    """Generates AI-powered auto-fix reasoning steps and reviewable field changes
+    for all deterministic rule violations (BR01-BR15) and semantic discrepancies.
+    """
+    return await AIAutoFixAssistant.generate_recommendations(db=db, revision_id=id)
+
+
+@router.post("/revisions/{id}/apply-fixes", response_model=AIFixApplyResponse)
+async def apply_ai_fix_recommendations(
+    id: UUID,
+    payload: AIFixApplyRequest,
+    db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_or_finance),
+    actor_name: str = Depends(get_current_actor_name),
+):
+    """Applies user-approved AI auto-fix changes to the revision, logs an audit event,
+    and re-runs deterministic validation.
+    """
+    return await AIAutoFixAssistant.apply_fixes(
+        db=db,
+        revision_id=id,
+        expected_version=payload.expected_version,
+        changes=payload.changes,
+        actor_name=actor_name,
+        actor_role=actor_role,
+    )
 
 
 @router.post("/revisions/{id}/record-manual-review", response_model=ManualReviewRecordResponse)

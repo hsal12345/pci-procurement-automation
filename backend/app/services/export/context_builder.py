@@ -312,4 +312,13 @@ def build_generation_context(
         "tax_total": tax_total,
         "grand_total": grand_total,
         "terbilang_grand_total": terbilang_str,
+        # Indonesian shorthand token aliases (FR-03 / UC-03)
+        "nama_sekolah": school_snap.get("name") or "SDN KEBON KOSONG 09",
+        "npsn_sekolah": school_snap.get("npsn") or "20108304",
+        "nama_perusahaan": company_snap.get("legal_name") or "CV. PUSTAKA CEMERLANG INDONESIA",
+        "nilai_kontrak": format_idr(grand_total, with_prefix=True),
+        "terbilang_kontrak": terbilang_str,
+        "nomor_paket": pkg_number,
+        "tahun_anggaran": fiscal_year,
+        "triwulan": quarter,
     }

@@ -1,0 +1,11 @@
+{
+  "runtime_mode": "local",
+  "provider": "mock",
+  "base_url": "local://deterministic-engine",
+  "api_key": null,
+  "model": "mock-rule-engine",
+  "timeout_seconds": 30,
+  "monthly_budget_usd": 10.0,
+  "auto_fallback_to_local": true,
+  "ai_enabled": true
+}

@@ -18,7 +18,13 @@ class ArchiveRecord(BaseModel):
     target_provider = Column(String(32), default="GOOGLE_DRIVE", nullable=False)
     folder_path = Column(String(512), nullable=False)  # Year / Quarter / SD / School / Package ID / Revision
     drive_folder_id = Column(String(128), nullable=True)
-    status = Column(String(32), default="PENDING", nullable=False, index=True)  # PENDING, SYNCING, SYNCED, FAILED
+    drive_folder_url = Column(String(512), nullable=True)
+    status = Column(String(32), default="PENDING", nullable=False, index=True)  # PENDING, SYNCING, SYNCED, FAILED, SUPERSEDED
+    progress_percent = Column(Integer, default=0, nullable=False)
+    current_step = Column(String(255), nullable=True)
+    uploaded_files = Column(Integer, default=0, nullable=False)
+    total_files = Column(Integer, default=0, nullable=False)
+    total_bytes = Column(Integer, default=0, nullable=False)
     attempt_count = Column(Integer, default=0, nullable=False)
     last_error = Column(Text, nullable=True)
     last_attempt_at = Column(TZDateTime, nullable=True)

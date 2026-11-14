@@ -55,5 +55,6 @@ async def process_archive_callback(
         archive_id=payload.archive_id,
         status_val=payload.status,
         drive_folder_id=payload.drive_folder_id,
+        drive_folder_url=payload.drive_folder_url,
         error_message=payload.error_message
     )

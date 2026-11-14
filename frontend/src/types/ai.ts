@@ -14,13 +14,69 @@ export interface SemanticDiscrepancyItem {
   recommended_action: string;
 }
 
+export interface DocumentSemanticScoreItem {
+  doc_code: string;
+  doc_name: string;
+  score_percentage: number;
+  passed: boolean;
+  issues_count: number;
+  notes: string;
+}
+
 export interface SemanticAuditResponse {
   revision_id: string;
   run_id?: string;
   status: "COMPLETED" | "FAILED" | "BUDGET_EXCEEDED" | "DISABLED" | "FALLBACK";
   findings_count: number;
   findings: SemanticDiscrepancyItem[];
+  overall_score: number;
+  passing_grade: number;
+  passed: boolean;
+  document_scores: DocumentSemanticScoreItem[];
   summary: string;
+}
+
+export interface AIFixReasoningStep {
+  step_number: number;
+  title: string;
+  detail: string;
+  status: string;
+}
+
+export interface AIFixChangeItem {
+  fix_id: string;
+  category: string;
+  rule_code: string;
+  target_tab: string;
+  field_path: string;
+  field_label: string;
+  current_value_display: string;
+  proposed_value_display: string;
+  proposed_value_json: any;
+  reasoning: string;
+  severity_resolved: string;
+}
+
+export interface AIFixRecommendationResponse {
+  revision_id: string;
+  status: "COMPLETED" | "NO_ISSUES" | "BUDGET_EXCEEDED" | "DISABLED" | "FAILED";
+  provider: string;
+  model: string;
+  reasoning_steps: AIFixReasoningStep[];
+  changes: AIFixChangeItem[];
+  summary: string;
+  findings_before_count: number;
+  estimated_resolved_count: number;
+}
+
+export interface AIFixApplyResponse {
+  revision_id: string;
+  new_version: number;
+  applied_count: number;
+  validation_passed: boolean;
+  remaining_errors: number;
+  remaining_warnings: number;
+  message: string;
 }
 
 export interface CandidateMappingProposal {
@@ -30,6 +86,9 @@ export interface CandidateMappingProposal {
   confidence_score: number;
   reasoning?: string;
   is_ambiguous: boolean;
+  detected_school_name?: string | null;
+  detected_fiscal_year?: number | null;
+  detected_quarter?: number | null;
 }
 
 export interface AIUsageResponse {

@@ -39,5 +39,8 @@ class Artifact(BaseModel):
     sha256_hash = Column(String(64), nullable=False)
     is_draft = Column(Boolean, default=True, nullable=False)
     archive_status = Column(String(32), default="PENDING", nullable=False)  # PENDING, SYNCING, SYNCED, FAILED
+    drive_file_id = Column(String(128), nullable=True)
+    drive_web_view_link = Column(String(512), nullable=True)
+    drive_synced_at = Column(TZDateTime, nullable=True)
 
     job = relationship("GenerationJob", back_populates="artifacts")

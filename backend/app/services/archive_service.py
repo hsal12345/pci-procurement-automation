@@ -35,8 +35,8 @@ class ArchiveService:
         pkg = revision.package
         school_name = (revision.school_snapshot or {}).get("name", "SDN")
         folder_path = (
-            f"{pkg.fiscal_year}/Q{pkg.quarter}/SD/{school_name}/"
-            f"{pkg.package_number.replace('/', '_')}/Rev-{revision.revision_number}"
+            f"{school_name}/{pkg.fiscal_year}/Triwulan {pkg.quarter} "
+            f"(Rev-{revision.revision_number})"
         )
 
         # Check existing record
@@ -51,12 +51,18 @@ class ArchiveService:
                 target_provider="GOOGLE_DRIVE",
                 folder_path=folder_path,
                 status="PENDING",
+                progress_percent=0,
+                uploaded_files=0,
+                total_files=0,
+                total_bytes=0,
                 attempt_count=0
             )
             db.add(archive)
         else:
             archive.folder_path = folder_path
             archive.status = "PENDING"
+            archive.progress_percent = 0
+            archive.current_step = None
             archive.last_error = None
 
         await audit_service.log_event(
@@ -89,7 +95,13 @@ class ArchiveService:
         archive_id: UUID,
         status_val: str,
         drive_folder_id: Optional[str] = None,
-        error_message: Optional[str] = None
+        drive_folder_url: Optional[str] = None,
+        error_message: Optional[str] = None,
+        uploaded_files: Optional[int] = None,
+        total_files: Optional[int] = None,
+        total_bytes: Optional[int] = None,
+        progress_percent: Optional[int] = None,
+        current_step: Optional[str] = None,
     ) -> ArchiveRecord:
         """Processes n8n or background sync callback reporting upload success or error.
         Guarantees that archive failures NEVER mutate or revoke the legal business ISSUED status.
@@ -105,13 +117,27 @@ class ArchiveService:
         archive.attempt_count += 1
         archive.last_attempt_at = datetime.utcnow()
 
+        if uploaded_files is not None:
+            archive.uploaded_files = uploaded_files
+        if total_files is not None:
+            archive.total_files = total_files
+        if total_bytes is not None:
+            archive.total_bytes = total_bytes
+        if current_step is not None:
+            archive.current_step = current_step
+
         if status_val.upper() == "SYNCED":
             archive.status = "SYNCED"
             archive.drive_folder_id = drive_folder_id
+            if drive_folder_url is not None:
+                archive.drive_folder_url = drive_folder_url
+            archive.progress_percent = progress_percent if progress_percent is not None else 100
             archive.synced_at = datetime.utcnow()
             archive.last_error = None
         else:
             archive.status = "FAILED"
+            if progress_percent is not None:
+                archive.progress_percent = progress_percent
             archive.last_error = error_message or "Gagal mengunggah berkas ke Google Drive."
 
         await audit_service.log_event(

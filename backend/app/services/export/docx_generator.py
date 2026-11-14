@@ -12,6 +12,20 @@ from app.services.export.template_builder import (
 )
 
 
+ACTIVE_TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent / "storage" / "templates" / "active"
+
+
+def resolve_template_path(tmpl_filename: str) -> Path:
+    """Returns custom active template if uploaded via FR-03/UC-03, else default built-in template."""
+    custom_path = ACTIVE_TEMPLATES_DIR / tmpl_filename
+    if custom_path.is_file():
+        return custom_path
+    default_path = TEMPLATES_DIR / tmpl_filename
+    if not default_path.exists():
+        build_all_templates()
+    return default_path
+
+
 def resolve_letterhead_image_path(path_str: Optional[str]) -> Optional[Path]:
     """Resolves local absolute or relative storage path of uploaded letterhead image."""
     if not path_str:
@@ -88,10 +102,7 @@ class DocxPackageGenerator:
         rendered_files: Dict[str, Path] = {}
 
         for doc_code, (tmpl_filename, out_filename) in DOCUMENT_MAP.items():
-            tmpl_path = TEMPLATES_DIR / tmpl_filename
-            if not tmpl_path.exists():
-                # Re-bootstrap if single template was deleted
-                build_all_templates()
+            tmpl_path = resolve_template_path(tmpl_filename)
 
             doc = DocxTemplate(str(tmpl_path))
             render_ctx = self._prepare_render_context(doc)
@@ -109,9 +120,7 @@ class DocxPackageGenerator:
             raise ValueError(f"Unknown document code: {doc_code}")
 
         tmpl_filename, _ = DOCUMENT_MAP[doc_code]
-        tmpl_path = TEMPLATES_DIR / tmpl_filename
-        if not tmpl_path.exists():
-            build_all_templates()
+        tmpl_path = resolve_template_path(tmpl_filename)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         doc = DocxTemplate(str(tmpl_path))

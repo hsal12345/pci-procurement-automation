@@ -3,8 +3,14 @@
 import { useState, useRef, useEffect } from "react";
 import { Decimal } from "decimal.js";
 import { RevisionLine, PackageRevision } from "@/types/package";
+import { apiClient } from "@/lib/api-client";
 import { formatIDR, formatTabularNumber, terbilangIndonesian } from "@/lib/formatters";
 import { ZeroPriceModal } from "../zero-price-modal";
+import {
+  CatalogPickerModal,
+  CatalogItem,
+  isPlaceholderLine,
+} from "../catalog-picker-modal";
 import {
   Plus,
   Trash2,
@@ -13,6 +19,7 @@ import {
   Info,
   AlertTriangle,
   Calculator,
+  BookOpen,
 } from "lucide-react";
 
 interface TabItemsProps {
@@ -46,6 +53,26 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
   const [lines, setLines] = useState<RevisionLine[]>(() => revision.lines || []);
   const [activeCell, setActiveCell] = useState<{ row: number; col: EditableColumn } | null>(null);
   const [zeroPriceTarget, setZeroPriceTarget] = useState<{ row: number; line: RevisionLine } | null>(null);
+  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
+
+  // Load active catalog items (FR-01 KatalogBarang)
+  const loadCatalogItems = async () => {
+    setIsCatalogLoading(true);
+    try {
+      const items = await apiClient.getItems({ active_only: true });
+      setCatalogItems(items || []);
+    } catch {
+      setCatalogItems([]);
+    } finally {
+      setIsCatalogLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCatalogItems();
+  }, []);
 
   // Sync when revision lines reload externally
   useEffect(() => {
@@ -249,6 +276,54 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
     setTimeout(() => focusCell(updated.length - 1, "confirmed_description"), 50);
   };
 
+  // Add one or more rows from KatalogBarang master data via modal selection table (FR-01)
+  const handleAddFromCatalogSelections = (
+    selections: Array<{ item: CatalogItem; quantity: number }>,
+    options: { replaceEmptyPlaceholders: boolean }
+  ) => {
+    if (selections.length === 0) return;
+
+    const baseLines = options.replaceEmptyPlaceholders
+      ? lines.filter((l) => !isPlaceholderLine(l))
+      : [...lines];
+
+    const addedLines: RevisionLine[] = selections.map(({ item, quantity }, idx) => {
+      const qty = Math.max(1, Number(quantity) || 1);
+      const refPrice = Number(item.reference_price || 0);
+      const lineTotal = new Decimal(qty).times(new Decimal(refPrice)).round().toNumber();
+      const specParts = [
+        item.default_spec || "",
+        item.sku ? `SKU: ${item.sku}` : "",
+        item.kbli ? `KBLI: ${item.kbli}` : "",
+      ].filter(Boolean);
+
+      return {
+        line_number: baseLines.length + idx + 1,
+        item_id: item.id,
+        original_description: item.canonical_description,
+        confirmed_description: item.canonical_description,
+        specification: specParts.join(" | ") || "-",
+        quantity: qty,
+        received_quantity: qty,
+        unit: item.default_unit || "Pcs",
+        hps_unit_price: refPrice,
+        offer_unit_price: refPrice,
+        final_unit_price: refPrice,
+        discount: 0,
+        line_total: lineTotal,
+        condition: "BAIK",
+      };
+    });
+
+    const updated = [...baseLines, ...addedLines].map((l, i) => ({
+      ...l,
+      line_number: i + 1,
+    }));
+    setLines(updated);
+    onLinesChanged(updated);
+    setIsCatalogModalOpen(false);
+  };
+
   // Remove line row
   const handleDeleteRow = (index: number) => {
     if (lines.length <= 1) {
@@ -273,6 +348,7 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
       : [{ tax_type: "PPN", rate_percent: 11, is_withholding: false }];
 
   let taxTotalDec = new Decimal(0);
+  let effectiveNonWithholdingTaxRatePercent = 0;
   const taxDetails: Array<{ tax_type: string; amount: number; rate: number }> = [];
 
   taxPolicies.forEach((p) => {
@@ -304,6 +380,7 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
     });
     if (!isWithholding) {
       taxTotalDec = taxTotalDec.plus(amountDec);
+      effectiveNonWithholdingTaxRatePercent += ratePct;
     }
   });
 
@@ -362,14 +439,30 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
             <Info className="w-3 h-3" /> Navigasi: [Tab] / [Enter] • Salin kolom sebelumnya: [Alt+C]
           </span>
           {!isReadOnly && (
-            <button
-              type="button"
-              onClick={handleAddRow}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium text-[11px] transition hover:opacity-90"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Tambah Baris</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsCatalogModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-medium text-[11px] transition"
+                title="Buka tabel pemilihan Master Katalog Barang dengan asisten pencarian & estimasi harga"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Pilih Katalog Barang</span>
+                {catalogItems.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-200 font-mono text-[10px]">
+                    {catalogItems.length}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleAddRow}
+                className="flex items-center gap-1 px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium text-[11px] transition hover:opacity-90"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Tambah Baris</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -586,6 +679,19 @@ export function TabItems({ revision, isReadOnly, onLinesChanged }: TabItemsProps
           </div>
         </div>
       </div>
+
+      {/* Catalog Picker Modal (Selection Table with Assistance) */}
+      <CatalogPickerModal
+        isOpen={isCatalogModalOpen}
+        catalogItems={catalogItems}
+        isLoading={isCatalogLoading}
+        existingLines={lines}
+        currentSubtotal={computedSubtotal}
+        effectiveTaxRatePercent={effectiveNonWithholdingTaxRatePercent}
+        onRefreshCatalog={loadCatalogItems}
+        onConfirm={handleAddFromCatalogSelections}
+        onClose={() => setIsCatalogModalOpen(false)}
+      />
 
       {/* Zero Price Justification Modal */}
       {zeroPriceTarget && (

@@ -48,11 +48,12 @@ class LogisticsService:
                 detail="Hanya peran Bagian Logistik atau Administrasi yang berwenang memperbarui data logistik pengiriman."
             )
 
-        # Get revision with lines
+        # Get revision with lines & events
         res_rev = await db.execute(
             select(PackageRevision)
             .options(
                 selectinload(PackageRevision.lines),
+                selectinload(PackageRevision.events),
                 selectinload(PackageRevision.logistics_record)
             )
             .where(PackageRevision.id == revision_id)
@@ -69,6 +70,36 @@ class LogisticsService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Revisi ini telah berstatus '{revision.status}' dan data logistik tidak dapat dimodifikasi lagi."
             )
+
+        # UC-10 Alternative Flow 4a: Tanggal Terima Mendahului Tanggal Pesanan / Kirim
+        effective_receipt = payload.receipt_date or payload.actual_delivery_date
+        if effective_receipt is not None:
+            effective_dispatch = (
+                payload.dispatch_date
+                if "dispatch_date" in payload.model_fields_set
+                else (revision.logistics_record.dispatch_date if revision.logistics_record else None)
+            )
+            if effective_dispatch and effective_receipt < effective_dispatch:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"Pelanggaran Alur 4a (UC-10): Tanggal terima fisik barang ({effective_receipt}) "
+                        f"mendahului tanggal kirim / Surat Jalan ({effective_dispatch}). Mohon klarifikasi data pengiriman."
+                    )
+                )
+
+            pesanan_event = next(
+                (ev for ev in (revision.events or []) if (ev.event_code or "").upper() in ("PESANAN", "SURAT_PESANAN", "SP")),
+                None
+            )
+            if pesanan_event and pesanan_event.event_date and effective_receipt < pesanan_event.event_date:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"Pelanggaran Alur 4a (UC-10): Tanggal terima fisik barang ({effective_receipt}) "
+                        f"mendahului tanggal Surat Pesanan ({pesanan_event.event_date}). Mohon klarifikasi data pengiriman."
+                    )
+                )
 
         # Retrieve or create LogisticsRecord
         logistics = revision.logistics_record

@@ -13,7 +13,7 @@ import {
 import { UserRole } from "@/types/package";
 import {
   FolderKanban,
-  FileSpreadsheet,
+  FileUp,
   CheckSquare,
   ShieldCheck,
   Archive,
@@ -29,6 +29,9 @@ import {
   AlertCircle,
   Sun,
   Moon,
+  Package,
+  FileCode2,
+  History,
 } from "lucide-react";
 
 export function Sidebar() {
@@ -141,9 +144,21 @@ export function Sidebar() {
       roles: ["ADMINISTRATION", "FINANCE_DIRECTOR", "SYSTEM_ADMINISTRATOR"],
     },
     {
-      name: "Impor Spreadsheet",
+      name: "Katalog & Anggaran",
+      href: "/catalog",
+      icon: Package,
+      roles: ["ADMINISTRATION", "FINANCE_DIRECTOR", "SYSTEM_ADMINISTRATOR"],
+    },
+    {
+      name: "Paket & Template SPJ",
+      href: "/templates",
+      icon: FileCode2,
+      roles: ["ADMINISTRATION", "FINANCE_DIRECTOR", "SYSTEM_ADMINISTRATOR"],
+    },
+    {
+      name: "Impor Dokumen",
       href: "/imports",
-      icon: FileSpreadsheet,
+      icon: FileUp,
       roles: ["ADMINISTRATION", "SYSTEM_ADMINISTRATOR"],
     },
     {
@@ -164,6 +179,12 @@ export function Sidebar() {
       href: "/packages?tab=documents",
       icon: Archive,
       roles: ["ADMINISTRATION", "FINANCE_DIRECTOR", "LOGISTICS", "SYSTEM_ADMINISTRATOR"],
+    },
+    {
+      name: "Portal Jejak Audit",
+      href: "/audit",
+      icon: History,
+      roles: ["ADMINISTRATION", "FINANCE_DIRECTOR", "SYSTEM_ADMINISTRATOR"],
     },
     {
       name: "AI & Audit Usage",

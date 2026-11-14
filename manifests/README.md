@@ -36,8 +36,8 @@ Dalam konteks arsitektur kontainer, berkas manifest untuk **Docker App** (Backen
 
 ### A. Kubernetes Manifest (`manifests/k8s/02-docker-app-manifest.yaml`)
 Mendeklarasikan deployment kontainer backend FastAPI dengan spesifikasi:
-- **ConfigMap & Secret**: Konfigurasi koneksi database PostgreSQL, mode runtime AI, Secret Key JWT, dan batas anggaran.
-- **PersistentVolumeClaim**: Storage 10Gi untuk `/app/storage` (dokumen SPJ, template docx, bukti foto fisik BAPB, dan kop surat).
+- **ConfigMap & Secret**: Konfigurasi koneksi database PostgreSQL, mode runtime AI, integrasi Google Drive Archive (`DRIVE_SYNC_*`, `GOOGLE_DRIVE_*`), Secret Key JWT, dan batas anggaran.
+- **PersistentVolumeClaim**: Storage 10Gi untuk `/app/storage` (dokumen SPJ, template docx, bukti foto fisik BAPB, dan kop surat) serta 100Mi untuk `/app/credentials` (kredensial Service Account & token OAuth Google Drive).
 - **Deployment**: 2 Replicas, rolling update (`maxSurge: 1`, `maxUnavailable: 0`), batas CPU/Memory, serta Liveness dan Readiness Probes pada `/health`.
 - **Service**: ClusterIP exposing port `8000`.
 
@@ -70,8 +70,8 @@ Standar W3C Web App Manifest untuk menjadikan antarmuka web sebagai aplikasi PWA
   - `display`: "standalone"
   - `theme_color`: "#02569D" (Biru identitas resmi CV PCI)
   - `background_color`: "#FFFFFF"
-  - `icons`: 192x192 & 512x512 maskable/any icons.
-  - `shortcuts`: Tautan cepat untuk *Buat Paket Pengadaan*, *Impor Spreadsheet*, dan *AI & Audit*.
+  - `icons`: 192x192 & 512x512 (`any` dan `maskable`).
+  - `shortcuts`: Tautan cepat untuk *Paket Pengadaan*, *Katalog & Anggaran*, *Impor Dokumen*, dan *AI & Audit Usage*.
 
 ### B. Kubernetes Web App Manifest (`manifests/k8s/03-web-app-manifest.yaml`)
 Mendeklarasikan deployment kontainer frontend Next.js pada klaster Kubernetes:
