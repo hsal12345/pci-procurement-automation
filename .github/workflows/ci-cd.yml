@@ -111,6 +111,16 @@ jobs:
               chmod 600 .env
             fi
 
+            if [ ! -f /etc/pci-ssl/cert.pem ] || [ ! -f /etc/pci-ssl/key.pem ]; then
+              echo ">>> Creating fallback self-signed SSL cert in /etc/pci-ssl (replace with Cloudflare Origin Cert for Full Strict)..."
+              mkdir -p /etc/pci-ssl
+              openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+                -keyout /etc/pci-ssl/key.pem \
+                -out /etc/pci-ssl/cert.pem \
+                -subj "/CN=pci-procurement-akpsi.cloud"
+              chmod 600 /etc/pci-ssl/key.pem
+            fi
+
             echo ">>> Building and starting Docker Compose services..."
             docker compose up -d --build --remove-orphans
 
