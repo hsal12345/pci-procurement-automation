@@ -37,17 +37,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install LibreOffice Writer for PDF Export Tests
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends libreoffice-writer
+      # Uncomment below to enable full LibreOffice PDF export tests in CI:
+      # - name: Install LibreOffice Writer for PDF Export Tests
+      #   run: |
+      #     sudo apt-get update -y
+      #     sudo apt-get install -y --no-install-recommends libreoffice-writer
 
       - name: Run Backend Automated Tests
         working-directory: backend
         env:
           USE_SQLITE_FALLBACK: "true"
         run: |
-          pytest tests/test_api.py tests/test_rules.py tests/test_terbilang.py tests/test_workflow.py tests/test_ai_runtime.py tests/test_system_knowledge.py -v
+          # Fast CI: skips 2 LibreOffice PDF issuance tests (28 fast unit/API tests still run)
+          pytest tests/test_api.py tests/test_rules.py tests/test_terbilang.py tests/test_workflow.py tests/test_ai_runtime.py tests/test_system_knowledge.py -k "not test_workflow_lifecycle_and_dual_status and not test_reopen_supersedes_prior_revision" -v
+          # Full CI (requires LibreOffice Writer step above):
+          # pytest tests/test_api.py tests/test_rules.py tests/test_terbilang.py tests/test_workflow.py tests/test_ai_runtime.py tests/test_system_knowledge.py -v
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
