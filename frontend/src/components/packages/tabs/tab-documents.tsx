@@ -138,7 +138,7 @@ export function TabDocuments({ revision }: TabDocumentsProps) {
       <div className="border border-border rounded-lg bg-card overflow-hidden">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-slate-200">
+            <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-foreground">
               <th className="px-3 py-2.5 w-16">Kode</th>
               <th className="px-3 py-2.5 min-w-[240px]">Nama Dokumen Resmi</th>
               <th className="px-3 py-2.5 w-28">Tahap Harga</th>

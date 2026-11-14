@@ -1204,7 +1204,7 @@ export function TabIdentity({
         ) : (
           <div className="border border-border rounded-md overflow-hidden shadow-sm">
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold text-slate-200">
+              <thead className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold text-foreground">
                 <tr>
                   <th className="px-3 py-2 w-10 text-center">No</th>
                   <th className="px-3 py-2 min-w-[160px]">Jenis Pajak</th>

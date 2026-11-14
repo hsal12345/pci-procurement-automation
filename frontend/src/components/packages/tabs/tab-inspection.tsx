@@ -386,7 +386,7 @@ export function TabInspection({
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-slate-200">
+                  <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-foreground">
                     <th className="px-3 py-2.5 w-28">Tingkat</th>
                     <th className="px-3 py-2.5 w-24">Aturan</th>
                     <th className="px-3 py-2.5 min-w-[200px]">Deskripsi Temuan & Pesan</th>
