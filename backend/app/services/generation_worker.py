@@ -2,12 +2,14 @@
 Executes multi-format document rendering (XLSX, DOCX, PDF, ZIP) asynchronously,
 tracks job progress, updates GenerationJob records, and registers artifacts idempotently.
 """
+import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 from uuid import UUID
 
+from pypdf import PdfWriter
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 
@@ -17,11 +19,79 @@ from app.models.generation import GenerationJob, Artifact
 from app.models.packages import PackageRevision
 from app.services.export.context_builder import build_generation_context
 from app.services.export.excel_generator import ExcelPackageGenerator
-from app.services.export.docx_generator import DocxPackageGenerator
-from app.services.export.pdf_service import PdfService
+from app.services.export.docx_generator import DocxPackageGenerator, DOCUMENT_MAP
+from app.services.export.pdf_service import PdfService, CANONICAL_PDF_ORDER
 from app.services.export.zip_packager import ZipPackager, compute_sha256
 
 logger = logging.getLogger("app.services.generation_worker")
+
+
+def _convert_single_pdf(
+    pdf_service: PdfService,
+    docx_path: Path,
+    pdf_dir: Path,
+    is_draft: bool,
+) -> Path:
+    """Converts a single DOCX file to PDF and applies draft watermark if needed."""
+    raw_pdf = pdf_service.convert_docx_to_pdf(docx_path, pdf_dir)
+    if is_draft:
+        watermarked_pdf = pdf_dir / f"{raw_pdf.stem}_wm.pdf"
+        pdf_service.apply_draft_watermark(raw_pdf, watermarked_pdf)
+        raw_pdf.unlink()
+        watermarked_pdf.rename(raw_pdf)
+    return raw_pdf
+
+
+def _merge_pdfs(pdf_map: Dict[str, Path], merged_path: Path) -> Path:
+    """Merges individual PDF files into a single consolidated PDF in canonical order."""
+    merger = PdfWriter()
+    try:
+        for doc_code, _expected_name in CANONICAL_PDF_ORDER:
+            if doc_code in pdf_map and pdf_map[doc_code].exists():
+                merger.append(str(pdf_map[doc_code]))
+        with open(merged_path, "wb") as f_merged:
+            merger.write(f_merged)
+    finally:
+        merger.close()
+    return merged_path
+
+
+async def _register_artifact(
+    db,
+    job_id: UUID,
+    revision_id: UUID,
+    doc_code: str,
+    fmt: str,
+    file_path: Path,
+    is_draft: bool,
+    collected_artifacts: List[Dict[str, Any]],
+) -> None:
+    """Computes file metadata and registers an artifact both in memory and DB."""
+    size_bytes = file_path.stat().st_size
+    sha256_hex = await asyncio.to_thread(compute_sha256, file_path)
+    collected_artifacts.append({
+        "doc_code": doc_code,
+        "format": fmt,
+        "filename": file_path.name,
+        "path": file_path,
+        "file_path": str(file_path),
+        "size_bytes": size_bytes,
+        "sha256": sha256_hex,
+    })
+    db.add(
+        Artifact(
+            job_id=job_id,
+            revision_id=revision_id,
+            doc_code=doc_code,
+            format=fmt,
+            filename=file_path.name,
+            file_path=str(file_path),
+            file_size=size_bytes,
+            sha256_hash=sha256_hex,
+            is_draft=is_draft,
+            archive_status="SYNCED",
+        )
+    )
 
 
 async def run_generation_job(
@@ -81,11 +151,21 @@ async def run_generation_job(
             rev_dir = base_dir / str(revision.package_id) / f"rev_{revision.revision_number}"
             rev_dir.mkdir(parents=True, exist_ok=True)
 
-            # Build generation context
+            # Build generation context & clean previous artifacts for requested formats
             context = build_generation_context(revision, package=revision.package, is_draft=is_draft)
+            formats_to_clean = list(target_formats)
+            await db.execute(
+                delete(Artifact)
+                .where(
+                    Artifact.revision_id == revision.id,
+                    Artifact.format.in_(formats_to_clean),
+                )
+            )
+            job.progress_percent = 12
+            await db.commit()
 
-            collected_artifacts = []
-            docx_rendered_files = {}
+            collected_artifacts: List[Dict[str, Any]] = []
+            docx_rendered_files: Dict[str, Path] = {}
 
             # 3. XLSX Generation
             if "XLSX" in target_formats:
@@ -95,18 +175,19 @@ async def run_generation_job(
                 xlsx_path = xlsx_dir / "00_PAKET_PENGADAAN.xlsx"
 
                 excel_gen = ExcelPackageGenerator(context, is_draft=is_draft)
-                excel_gen.generate_workbook(output_path=xlsx_path)
+                await asyncio.to_thread(excel_gen.generate_workbook, xlsx_path)
 
-                collected_artifacts.append({
-                    "doc_code": "ALL",
-                    "format": "XLSX",
-                    "filename": xlsx_path.name,
-                    "path": xlsx_path,
-                    "file_path": str(xlsx_path),
-                    "size_bytes": xlsx_path.stat().st_size,
-                    "sha256": compute_sha256(xlsx_path),
-                })
-                job.progress_percent = 30
+                await _register_artifact(
+                    db=db,
+                    job_id=job.id,
+                    revision_id=revision.id,
+                    doc_code="ALL",
+                    fmt="XLSX",
+                    file_path=xlsx_path,
+                    is_draft=is_draft,
+                    collected_artifacts=collected_artifacts,
+                )
+                job.progress_percent = 25
                 await db.commit()
 
             # 4. DOCX Generation
@@ -117,23 +198,27 @@ async def run_generation_job(
                 docx_dir = rev_dir / "docx"
                 docx_dir.mkdir(parents=True, exist_ok=True)
 
-                docx_gen = DocxPackageGenerator(context)
-                docx_rendered_files = docx_gen.generate_all(docx_dir)
+                docx_gen = await asyncio.to_thread(DocxPackageGenerator, context)
+                total_docx = len(DOCUMENT_MAP)
+                for idx, (doc_code, (_tmpl_filename, out_filename)) in enumerate(DOCUMENT_MAP.items()):
+                    out_path = docx_dir / out_filename
+                    await asyncio.to_thread(docx_gen.generate_single, doc_code, out_path)
+                    docx_rendered_files[doc_code] = out_path
 
-                if "DOCX" in target_formats:
-                    for doc_code, docx_path in docx_rendered_files.items():
-                        collected_artifacts.append({
-                            "doc_code": doc_code,
-                            "format": "DOCX",
-                            "filename": docx_path.name,
-                            "path": docx_path,
-                            "file_path": str(docx_path),
-                            "size_bytes": docx_path.stat().st_size,
-                            "sha256": compute_sha256(docx_path),
-                        })
+                    if "DOCX" in target_formats:
+                        await _register_artifact(
+                            db=db,
+                            job_id=job.id,
+                            revision_id=revision.id,
+                            doc_code=doc_code,
+                            fmt="DOCX",
+                            file_path=out_path,
+                            is_draft=is_draft,
+                            collected_artifacts=collected_artifacts,
+                        )
 
-                job.progress_percent = 55
-                await db.commit()
+                    job.progress_percent = 25 + int(((idx + 1) / total_docx) * 25)
+                    await db.commit()
 
             # 5. PDF Generation & Merging
             if "PDF" in target_formats:
@@ -141,25 +226,41 @@ async def run_generation_job(
                 pdf_dir = rev_dir / "pdf"
                 pdf_dir.mkdir(parents=True, exist_ok=True)
 
-                pdf_service = PdfService()
-                pdf_rendered_files = pdf_service.convert_batch_docx(
-                    docx_rendered_files,
-                    pdf_dir,
-                    is_draft=is_draft
+                pdf_service = await asyncio.to_thread(PdfService)
+                pdf_rendered_files: Dict[str, Path] = {}
+                total_pdfs = max(len(docx_rendered_files), 1)
+                for idx, (doc_code, docx_path) in enumerate(docx_rendered_files.items()):
+                    pdf_path = await asyncio.to_thread(
+                        _convert_single_pdf, pdf_service, docx_path, pdf_dir, is_draft
+                    )
+                    pdf_rendered_files[doc_code] = pdf_path
+
+                    await _register_artifact(
+                        db=db,
+                        job_id=job.id,
+                        revision_id=revision.id,
+                        doc_code=doc_code,
+                        fmt="PDF",
+                        file_path=pdf_path,
+                        is_draft=is_draft,
+                        collected_artifacts=collected_artifacts,
+                    )
+                    job.progress_percent = 50 + int(((idx + 1) / total_pdfs) * 35)
+                    await db.commit()
+
+                merged_path = pdf_dir / "00_PAKET_LENGKAP.pdf"
+                await asyncio.to_thread(_merge_pdfs, pdf_rendered_files, merged_path)
+                await _register_artifact(
+                    db=db,
+                    job_id=job.id,
+                    revision_id=revision.id,
+                    doc_code="ALL",
+                    fmt="PDF",
+                    file_path=merged_path,
+                    is_draft=is_draft,
+                    collected_artifacts=collected_artifacts,
                 )
-
-                for doc_code, pdf_path in pdf_rendered_files.items():
-                    collected_artifacts.append({
-                        "doc_code": doc_code,
-                        "format": "PDF",
-                        "filename": pdf_path.name,
-                        "path": pdf_path,
-                        "file_path": str(pdf_path),
-                        "size_bytes": pdf_path.stat().st_size,
-                        "sha256": compute_sha256(pdf_path),
-                    })
-
-                job.progress_percent = 85
+                job.progress_percent = 90
                 await db.commit()
 
             # 6. ZIP Packaging & Manifests
@@ -169,49 +270,22 @@ async def run_generation_job(
                 zip_dir.mkdir(parents=True, exist_ok=True)
 
                 packager = ZipPackager(context)
-                pkg_result = packager.create_package_zip(collected_artifacts, zip_dir)
-
-                zip_info = pkg_result["zip_file"]
-                collected_artifacts.append({
-                    "doc_code": "ZIP",
-                    "format": "ZIP",
-                    "filename": zip_info["filename"],
-                    "path": Path(zip_info["file_path"]),
-                    "file_path": zip_info["file_path"],
-                    "size_bytes": zip_info["size_bytes"],
-                    "sha256": zip_info["sha256"],
-                })
-
-            # 7. Idempotent Artifact Database Registration
-            # Delete any existing artifacts for this revision matching the generated formats
-            formats_to_clean = list(target_formats)
-            await db.execute(
-                delete(Artifact)
-                .where(
-                    Artifact.revision_id == revision.id,
-                    Artifact.format.in_(formats_to_clean)
+                pkg_result = await asyncio.to_thread(
+                    packager.create_package_zip, collected_artifacts, zip_dir
                 )
-            )
+                zip_path = Path(pkg_result["zip_file"]["file_path"])
+                await _register_artifact(
+                    db=db,
+                    job_id=job.id,
+                    revision_id=revision.id,
+                    doc_code="ZIP",
+                    fmt="ZIP",
+                    file_path=zip_path,
+                    is_draft=is_draft,
+                    collected_artifacts=collected_artifacts,
+                )
 
-            # Insert freshly generated artifacts
-            for art in collected_artifacts:
-                # Avoid inserting helper manifest files as separate DB rows unless format is tracked
-                if art.get("format") in ["XLSX", "DOCX", "PDF", "ZIP"]:
-                    db_art = Artifact(
-                        job_id=job.id,
-                        revision_id=revision.id,
-                        doc_code=art["doc_code"],
-                        format=art["format"],
-                        filename=art["filename"],
-                        file_path=art["file_path"],
-                        file_size=art["size_bytes"],
-                        sha256_hash=art["sha256"],
-                        is_draft=is_draft,
-                        archive_status="SYNCED",
-                    )
-                    db.add(db_art)
-
-            # 8. Complete Job
+            # 7. Complete Job
             job.status = "SUCCEEDED"
             job.progress_percent = 100
             job.completed_at = datetime.now(timezone.utc)

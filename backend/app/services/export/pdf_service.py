@@ -154,8 +154,8 @@ class PdfService:
             watermark_pdf = PdfReader(packet)
             watermark_page = watermark_pdf.pages[0]
 
-            page.merge_page(watermark_page)
-            writer.add_page(page)
+            target_page = writer.add_page(page)
+            target_page.merge_page(watermark_page)
 
         with open(output_pdf, "wb") as f_out:
             writer.write(f_out)

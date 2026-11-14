@@ -687,6 +687,12 @@ export const apiClient = {
       body: JSON.stringify({ formats }),
     }),
 
+  getGenerationJob: (jobId: string) =>
+    request<GenerationJob>(`/api/v1/jobs/${jobId}`),
+
+  getLatestGenerationJob: (revisionId: string) =>
+    request<GenerationJob | null>(`/api/v1/revisions/${revisionId}/jobs/latest`).catch(() => null),
+
   getArtifacts: (revisionId: string) =>
     request<Artifact[]>(`/api/v1/revisions/${revisionId}/artifacts`),
 

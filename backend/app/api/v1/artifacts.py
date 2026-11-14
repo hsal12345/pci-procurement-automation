@@ -40,8 +40,14 @@ async def list_revision_artifacts(revision_id: UUID, db: AsyncSession = Depends(
 
 
 @router.get("/artifacts/{id}/download")
-async def download_artifact(id: UUID, db: AsyncSession = Depends(get_db)):
-    """Streams and downloads a generated document file by artifact ID."""
+async def download_artifact(
+    id: UUID,
+    inline: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """Streams and downloads a generated document file by artifact ID.
+    Pass ?inline=true to render in-browser (e.g. PDF viewer) instead of forcing attachment download.
+    """
     res = await db.execute(select(Artifact).where(Artifact.id == id))
     art = res.scalar_one_or_none()
     if not art:
@@ -63,4 +69,5 @@ async def download_artifact(id: UUID, db: AsyncSession = Depends(get_db)):
         path=str(file_path),
         filename=art.filename,
         media_type=media_type,
+        content_disposition_type="inline" if inline else "attachment",
     )
