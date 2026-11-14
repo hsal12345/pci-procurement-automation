@@ -1,0 +1,129 @@
+name: CI/CD Deploy to VPS (Docker Compose)
+
+on:
+  push:
+    branches:
+      - feature-branch
+      - main
+  pull_request:
+    branches:
+      - feature-branch
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: pci-cicd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci-verify:
+    name: CI Test & Typecheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install Backend Dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Backend Automated Tests
+        working-directory: backend
+        env:
+          USE_SQLITE_FALLBACK: "true"
+        run: |
+          pytest tests/test_api.py tests/test_rules.py tests/test_terbilang.py tests/test_workflow.py tests/test_ai_runtime.py tests/test_system_knowledge.py -v
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install Frontend Dependencies & Typecheck
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm tsc --noEmit
+
+  cd-deploy:
+    name: CD Deploy via SSH to VPS
+    needs: ci-verify
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy Stack on VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+
+            APP_DIR="/opt/pci-procurement"
+            BRANCH="${{ github.ref_name }}"
+            REPO_URL="https://github.com/${{ github.repository }}.git"
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo ">>> Initializing repository in $APP_DIR..."
+              mkdir -p "$APP_DIR"
+              git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+            echo ">>> Syncing latest code from origin/$BRANCH..."
+            git fetch --all --prune
+            git checkout "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            if [ ! -f .env ]; then
+              echo ">>> Generating secure production .env from .env.example..."
+              cp .env.example .env
+              RAND_DB_PASS=$(openssl rand -hex 24)
+              RAND_SECRET=$(openssl rand -hex 32)
+              sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${RAND_DB_PASS}|" .env
+              sed -i "s|^SECRET_KEY=.*|SECRET_KEY=${RAND_SECRET}|" .env
+              chmod 600 .env
+            fi
+
+            echo ">>> Building and starting Docker Compose services..."
+            docker compose up -d --build --remove-orphans
+
+            echo ">>> Waiting for application healthcheck..."
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1/health >/dev/null 2>&1; then
+                echo ">>> Healthcheck PASSED!"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo ">>> ERROR: Healthcheck failed after 60s!"
+                docker compose ps
+                docker compose logs --tail=50 backend nginx
+                exit 1
+              fi
+              sleep 2
+            done
+
+            echo ">>> Cleaning up unused Docker images..."
+            docker image prune -f
+            docker compose ps
