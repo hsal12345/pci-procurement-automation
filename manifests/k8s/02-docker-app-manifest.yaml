@@ -19,6 +19,14 @@ data:
   AI_PROVIDER: "mock"
   AI_MODEL: "google/gemini-2.0-flash-exp:free"
   AI_MONTHLY_BUDGET_USD: "10.0"
+  DRIVE_SYNC_ENABLED: "true"
+  DRIVE_SYNC_MODE: "auto"
+  GOOGLE_DRIVE_CREDENTIALS_PATH: "credentials/gdrive-service-account.json"
+  GOOGLE_DRIVE_FOLDER_ID_PATH: "credentials/gdrive-folder-id.txt"
+  GOOGLE_DRIVE_OAUTH_CLIENT_PATH: "credentials/gdrive-oauth-client.json"
+  GOOGLE_DRIVE_OAUTH_TOKEN_PATH: "credentials/gdrive-oauth-token.json"
+  GOOGLE_DRIVE_OAUTH_REDIRECT_URI: "http://pci-procurement.local/api/v1/archive/oauth/callback"
+  GOOGLE_DRIVE_ROOT_FOLDER_ID: ""
 ---
 apiVersion: v1
 kind: Secret
@@ -50,6 +58,22 @@ spec:
   resources:
     requests:
       storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pci-docker-app-credentials-pvc
+  namespace: pci-procurement
+  labels:
+    app.kubernetes.io/name: docker-app
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: pci-procurement
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -92,6 +116,8 @@ spec:
           volumeMounts:
             - name: backend-storage
               mountPath: /app/storage
+            - name: backend-credentials
+              mountPath: /app/credentials
           livenessProbe:
             httpGet:
               path: /health
@@ -120,6 +146,9 @@ spec:
         - name: backend-storage
           persistentVolumeClaim:
             claimName: pci-docker-app-storage-pvc
+        - name: backend-credentials
+          persistentVolumeClaim:
+            claimName: pci-docker-app-credentials-pvc
 ---
 apiVersion: v1
 kind: Service
