@@ -90,11 +90,13 @@ class Item(BaseModel):
     __tablename__ = "items"
 
     sku = Column(String(64), unique=True, index=True, nullable=True)
+    kbli = Column(String(32), nullable=True, index=True)
     canonical_description = Column(String(255), nullable=False, index=True)
     default_spec = Column(Text, nullable=True)
     brand = Column(String(100), nullable=True)
     category = Column(String(100), nullable=True)
     default_unit = Column(String(32), nullable=True)
+    reference_price = Column(Numeric(18, 2), default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
 
 
@@ -116,6 +118,8 @@ class BudgetClassification(BaseModel):
     account_code = Column(String(64), nullable=True)
     account_name = Column(String(255), nullable=False)
     funding_source_code = Column(String(32), nullable=True)
+    funding_scheme = Column(String(32), default="BOS_REGULER", nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
 
 
 class FundingSource(BaseModel):
@@ -173,3 +177,21 @@ class NumberCounter(BaseModel):
 
     scope_key = Column(String(64), unique=True, index=True, nullable=False)  # e.g. "COMPANY:FAKTUR:2026"
     counter_val = Column(Integer, default=0, nullable=False)
+
+
+class TemplateRegistry(BaseModel):
+    """Document template version & token configuration registry (FR-03 / UC-03)."""
+    __tablename__ = "template_registry"
+
+    doc_code = Column(String(16), nullable=False, index=True)  # D01..D13
+    doc_name = Column(String(255), nullable=False)
+    funding_scheme = Column(String(32), default="ALL", nullable=False)  # ALL, BOS_REGULER, BOS_KINERJA, BOP
+    is_mandatory = Column(Boolean, default=True, nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    filename = Column(String(255), nullable=False)
+    file_path = Column(String(512), nullable=True)
+    sha256_hash = Column(String(64), nullable=True)
+    required_tokens = Column(JSON, nullable=False, default=list)
+    detected_tokens = Column(JSON, nullable=False, default=list)
+    is_active = Column(Boolean, default=True, nullable=False)
+    uploaded_by = Column(String(100), default="SYSTEM", nullable=False)

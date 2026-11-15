@@ -1,118 +1,44 @@
 "use client";
 
 import { useState } from "react";
-import { UploadCloud, FileSpreadsheet, AlertTriangle, CheckCircle2, X, Loader2, Sparkles, Download } from "lucide-react";
-import { apiClient, getAuthToken, getCurrentActorName, getCurrentRole } from "@/lib/api-client";
+import { FileUp, X } from "lucide-react";
+import { ImportWizard } from "@/components/imports/import-wizard";
+import { ImportConfirmResponse } from "@/types/imports";
 
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (result?: ImportConfirmResponse) => void;
 }
 
 export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
-  const [file, setFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [fiscalYear, setFiscalYear] = useState<number>(2026);
-  const [quarter, setQuarter] = useState<number>(2);
-  const [fundSource, setFundSource] = useState<string>("BOS_REGULER");
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
 
   if (!isOpen) return null;
 
-  const handleDownloadTemplate = async () => {
-    setIsDownloading(true);
-    try {
-      await apiClient.downloadImportTemplate();
-    } catch (err: any) {
-      alert(err.message || "Gagal mengunduh format template.");
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    if (!f.name.endsWith(".xlsx") && !f.name.endsWith(".xls")) {
-      alert("Hanya berkas format Excel (.xlsx / .xls) yang diperbolehkan.");
-      return;
-    }
-    setFile(f);
-  };
-
-  const handleUpload = async () => {
-    if (!file) {
-      alert("Pilih berkas spreadsheet terlebih dahulu.");
-      return;
-    }
-    setIsUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("fiscal_year", String(fiscalYear));
-      formData.append("quarter", String(quarter));
-      formData.append("fund_source", fundSource);
-
-      const token = getAuthToken();
-      const authHeaders: Record<string, string> = {
-        "X-User-Role": getCurrentRole(),
-        "X-Actor-Name": getCurrentActorName(),
-      };
-      if (token) {
-        authHeaders["Authorization"] = `Bearer ${token}`;
-      }
-
-      const res = await fetch("/api/v1/imports/upload", {
-        method: "POST",
-        headers: authHeaders,
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || "Gagal mengimpor spreadsheet.");
-      }
-
-      const uploadData = await res.json();
-
-      // Automatically confirm the parsed import to create Package & Revision
-      const confirmRes = await fetch(`/api/v1/imports/${uploadData.import_id}/confirm`, {
-        method: "POST",
-        headers: {
-          ...authHeaders,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          funding_source_code: fundSource,
-          notes: `Diimpor dari berkas ${file.name}`,
-        }),
-      });
-
-      if (!confirmRes.ok) {
-        const errConfirm = await confirmRes.json().catch(() => ({}));
-        throw new Error(errConfirm.detail || "Gagal mengonfirmasi dan membuat paket transaksi.");
-      }
-
-      const confirmData = await confirmRes.json();
-      alert(`Berkas berhasil diimpor dan dibuat sebagai paket baru!\nNomor Paket: ${confirmData.package_number}\nNilai: Rp ${Number(confirmData.grand_total).toLocaleString("id-ID")}`);
-      onSuccess();
-    } catch (err: any) {
-      alert(`Gagal mengimpor: ${err.message || err}`);
-    } finally {
-      setIsUploading(false);
-    }
+  const handleSuccess = (result: ImportConfirmResponse) => {
+    alert(
+      `Berkas berhasil dikonfirmasi dan dibuat sebagai draf paket!\n` +
+        `Nomor Paket: ${result.package_number}\n` +
+        `Mode Pemetaan: ${result.mapping_source}\n` +
+        `Nilai: Rp ${Number(result.grand_total).toLocaleString("id-ID")}`
+    );
+    onSuccess(result);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
-      <div className="bg-card border border-border w-full max-w-lg rounded-lg shadow-2xl overflow-hidden font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto">
+      <div
+        className={`bg-card border border-border w-full rounded-lg shadow-2xl overflow-hidden font-sans my-auto transition-all ${
+          wizardStep === 1 ? "max-w-xl" : "max-w-5xl"
+        }`}
+      >
         {/* Header */}
         <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-4 h-4 text-primary" />
+            <FileUp className="w-4 h-4 text-primary" />
             <h3 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
-              Impor Buku Kerja Excel (.xlsx)
+              Impor Dokumen Pengadaan &amp; Pemetaan AI (.xlsx, .pdf, .doc, .docx)
             </h3>
           </div>
           <button
@@ -124,124 +50,13 @@ export function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-5 space-y-4 text-xs">
-          {/* Metadata selection */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-[11px] font-mono text-muted-foreground uppercase mb-1">
-                Tahun Anggaran
-              </label>
-              <input
-                type="number"
-                value={fiscalYear}
-                onChange={(e) => setFiscalYear(parseInt(e.target.value) || 2026)}
-                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-mono tabular-nums transition"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-mono text-muted-foreground uppercase mb-1">
-                Triwulan (TW)
-              </label>
-              <select
-                value={quarter}
-                onChange={(e) => setQuarter(parseInt(e.target.value) || 1)}
-                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-mono transition"
-              >
-                <option value={1}>TW I</option>
-                <option value={2}>TW II</option>
-                <option value={3}>TW III</option>
-                <option value={4}>TW IV</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-mono text-muted-foreground uppercase mb-1">
-                Sumber Dana
-              </label>
-              <select
-                value={fundSource}
-                onChange={(e) => setFundSource(e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-mono text-[11px] transition"
-              >
-                <option value="BOS_REGULER">BOS Reguler</option>
-                <option value="BOS_KINERJA">BOS Kinerja</option>
-                <option value="BOP">BOP</option>
-                <option value="LAINNYA">Lainnya</option>
-              </select>
-            </div>
-          </div>
-
-          {/* File Dropzone */}
-          <div className="border border-dashed border-border rounded-lg p-6 text-center hover:border-primary/60 transition bg-card/60">
-            <input
-              type="file"
-              id="xlsx-upload"
-              accept=".xlsx,.xls"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-            <label
-              htmlFor="xlsx-upload"
-              className="cursor-pointer flex flex-col items-center justify-center gap-2"
-            >
-              <FileSpreadsheet className="w-8 h-8 text-primary/70" />
-              {file ? (
-                <div className="space-y-0.5">
-                  <span className="font-semibold text-foreground font-mono">{file.name}</span>
-                  <span className="block text-[10px] text-muted-foreground">
-                    ({(file.size / 1024).toFixed(1)} KB)
-                  </span>
-                </div>
-              ) : (
-                <div className="space-y-0.5">
-                  <span className="text-xs font-semibold text-foreground">
-                    Pilih berkas Excel (.xlsx) yang akan diimpor
-                  </span>
-                  <span className="block text-[10px] text-muted-foreground font-mono">
-                    Mendukung Format_Impor_Pengadaan_SPJ_PCI.xlsx & 4 PCI KK09.xlsx
-                  </span>
-                </div>
-              )}
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground font-mono bg-muted/20 p-2.5 rounded border border-border">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-              <span>
-                Belum punya formatnya? Unduh template Excel standar.
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleDownloadTemplate}
-              disabled={isDownloading}
-              className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary font-sans font-semibold text-[11px] transition disabled:opacity-50"
-            >
-              {isDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-              <span>Unduh Format</span>
-            </button>
-          </div>
-
-          {/* Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-1.5 text-xs rounded border border-border bg-card hover:bg-muted text-foreground transition"
-            >
-              Batal
-            </button>
-            <button
-              type="button"
-              onClick={handleUpload}
-              disabled={isUploading || !file}
-              className="flex items-center gap-1 px-4 py-1.5 text-xs font-semibold rounded bg-primary text-primary-foreground hover:opacity-90 transition shadow-xs disabled:opacity-50"
-            >
-              {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
-              <span>Mulai Ekstraksi & Impor</span>
-            </button>
-          </div>
+        {/* Wizard Content */}
+        <div className="p-5 max-h-[85vh] overflow-y-auto">
+          <ImportWizard
+            onCancel={onClose}
+            onStepChange={setWizardStep}
+            onSuccess={handleSuccess}
+          />
         </div>
       </div>
     </div>

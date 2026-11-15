@@ -36,6 +36,8 @@ backend/*.db
 backend/*.db-journal
 *.db
 *.db-journal
+backend/credentials/*
+!backend/credentials/.gitkeep
 
 # Scratch & logs
 scratch/
@@ -50,3 +52,8 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Credentials & Secrets
+backend/credentials/
+*.service-account*.json
+*gdrive*.json

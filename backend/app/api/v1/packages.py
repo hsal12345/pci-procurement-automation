@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.api.deps import get_current_user_role
 from app.models.packages import Package, PackageRevision, RevisionLine, DocumentEvent, DocumentNumber
-from app.models.masters import School, Company, TaxPolicyVersion, OfficialAppointment
+from app.models.masters import School, Company, TaxPolicyVersion, OfficialAppointment, FundingSource, BudgetClassification
 from app.schemas.packages import (
     PackageCreate,
     PackageResponse,
@@ -22,6 +22,25 @@ from app.core.terbilang import terbilang
 
 router = APIRouter(prefix="/packages", tags=["Packages"])
 revisions_router = APIRouter(prefix="/revisions", tags=["Package Revisions"])
+
+
+async def _attach_package_computed_fields(db: AsyncSession, packages: List[Package]) -> None:
+    """Populates package_code, current_revision, and resolved fund_source code cleanly."""
+    fs_res = await db.execute(select(FundingSource))
+    fs_map = {fs.id: fs.code for fs in fs_res.scalars().all()}
+    bg_res = await db.execute(select(BudgetClassification))
+    bg_map = {bg.id: bg.funding_scheme for bg in bg_res.scalars().all()}
+
+    for pkg in packages:
+        setattr(pkg, "package_code", pkg.package_number)
+        if pkg.funding_source_id and pkg.funding_source_id in fs_map:
+            setattr(pkg, "fund_source", fs_map[pkg.funding_source_id])
+        elif pkg.budget_id and pkg.budget_id in bg_map:
+            setattr(pkg, "fund_source", bg_map[pkg.budget_id])
+        else:
+            setattr(pkg, "fund_source", "BOS_REGULER")
+        if pkg.revisions:
+            pkg.current_revision = pkg.revisions[-1]
 
 
 @router.get("", response_model=List[PackageResponse])
@@ -45,10 +64,7 @@ async def list_packages(
 
     result = await db.execute(query)
     packages = result.scalars().all()
-    for pkg in packages:
-        setattr(pkg, "package_code", pkg.package_number)
-        if pkg.revisions:
-            pkg.current_revision = pkg.revisions[-1]
+    await _attach_package_computed_fields(db, packages)
     return packages
 
 
@@ -82,12 +98,19 @@ async def create_package(payload: PackageCreate, db: AsyncSession = Depends(get_
                 break
             next_seq += 1
 
+    resolved_fs_id = payload.funding_source_id
+    if not resolved_fs_id and payload.fund_source:
+        fs_res = await db.execute(select(FundingSource).where(FundingSource.code == payload.fund_source.upper()))
+        fs_obj = fs_res.scalar_one_or_none()
+        if fs_obj:
+            resolved_fs_id = fs_obj.id
+
     package = Package(
         package_number=pkg_number,
         school_id=school.id,
         fiscal_year=payload.fiscal_year,
         quarter=payload.quarter,
-        funding_source_id=payload.funding_source_id,
+        funding_source_id=resolved_fs_id,
         budget_id=payload.budget_id,
         status="DRAFT"
     )
@@ -245,9 +268,7 @@ async def create_package(payload: PackageCreate, db: AsyncSession = Depends(get_
         .where(Package.id == package.id)
     )
     loaded_package = result.scalar_one()
-    setattr(loaded_package, "package_code", loaded_package.package_number)
-    if loaded_package.revisions:
-        loaded_package.current_revision = loaded_package.revisions[-1]
+    await _attach_package_computed_fields(db, [loaded_package])
 
     return loaded_package
 
@@ -267,9 +288,7 @@ async def get_package(id: UUID, db: AsyncSession = Depends(get_db)):
     package = result.scalar_one_or_none()
     if not package:
         raise HTTPException(status_code=404, detail="Paket pengadaan tidak ditemukan.")
-    setattr(package, "package_code", package.package_number)
-    if package.revisions:
-        package.current_revision = package.revisions[-1]
+    await _attach_package_computed_fields(db, [package])
     return package
 
 

@@ -1,9 +1,12 @@
 import { UserRole, PackageItem, PackageRevision, RevisionLine } from "@/types/package";
 import { ValidationRun } from "@/types/validation";
 import { LogisticsRecord, EvidenceAttachment } from "@/types/logistics";
-import { Artifact, GenerationJob } from "@/types/documents";
+import { Artifact, GenerationJob, ArchiveRecord } from "@/types/documents";
 import {
   SemanticAuditResponse,
+  AIFixRecommendationResponse,
+  AIFixChangeItem,
+  AIFixApplyResponse,
   AIUsageResponse,
   CandidateMappingProposal,
   AIRuntimeConfig,
@@ -17,6 +20,14 @@ import {
   SystemKnowledgeChatRequest,
   SystemKnowledgeChatResponse,
 } from "@/types/ai";
+import {
+  ImportUploadResponse,
+  ImportPreviewResponse,
+  ImportProgressState,
+  ImportReparseRequest,
+  ImportConfirmRequest,
+  ImportConfirmResponse,
+} from "@/types/imports";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -337,9 +348,30 @@ export const apiClient = {
     }),
 
   // AI Assistance & Semantic Verification
-  auditWithAI: (revisionId: string) =>
+  auditWithAI: (revisionId: string, passingGrade: number = 95) =>
     request<SemanticAuditResponse>(`/api/v1/ai/revisions/${revisionId}/audit`, {
       method: "POST",
+      body: JSON.stringify({ passing_grade: passingGrade }),
+    }),
+
+  getLatestAIAudit: (revisionId: string) =>
+    request<SemanticAuditResponse | null>(`/api/v1/ai/revisions/${revisionId}/audit/latest`),
+
+  updateAIAuditPassingGrade: (revisionId: string, passingGrade: number) =>
+    request<SemanticAuditResponse>(`/api/v1/ai/revisions/${revisionId}/audit/passing-grade`, {
+      method: "PATCH",
+      body: JSON.stringify({ passing_grade: passingGrade }),
+    }),
+
+  getAIFixRecommendations: (revisionId: string) =>
+    request<AIFixRecommendationResponse>(`/api/v1/ai/revisions/${revisionId}/fix-recommendations`, {
+      method: "POST",
+    }),
+
+  applyAIFixes: (revisionId: string, expectedVersion: number, changes: AIFixChangeItem[]) =>
+    request<AIFixApplyResponse>(`/api/v1/ai/revisions/${revisionId}/apply-fixes`, {
+      method: "POST",
+      body: JSON.stringify({ expected_version: expectedVersion, changes }),
     }),
 
   recordManualReview: (revisionId: string, verifierName: string, verificationNotes: string) =>
@@ -393,9 +425,212 @@ export const apiClient = {
       body: JSON.stringify(payload),
     }),
 
-  suggestAIMapping: (importId: string) =>
+  suggestAIMapping: (importId: string, sheetName?: string) =>
     request<CandidateMappingProposal>(`/api/v1/ai/imports/${importId}/suggest-mapping`, {
       method: "POST",
+      body: JSON.stringify(sheetName ? { sheet_name: sheetName } : {}),
+    }),
+
+  suggestAIMappingAsync: (importId: string, sheetName?: string) =>
+    request<{
+      import_id: string;
+      status: string;
+      sheet_name?: string;
+      provider?: string;
+      model?: string;
+      runtime_mode?: string;
+      progress: ImportProgressState;
+    }>(`/api/v1/ai/imports/${importId}/suggest-mapping-async`, {
+      method: "POST",
+      body: JSON.stringify(sheetName ? { sheet_name: sheetName } : {}),
+    }),
+
+  getImportProgress: (importId: string) =>
+    request<ImportProgressState>(`/api/v1/imports/${importId}/progress`),
+
+  subscribeImportProgress: (
+    importId: string,
+    onProgress: (state: ImportProgressState) => void,
+    onDone?: (finalState: ImportProgressState) => void,
+    onError?: (err: Error) => void
+  ): (() => void) => {
+    const controller = new AbortController();
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let finished = false;
+    const terminalStatuses = new Set(["COMPLETED", "AMBIGUOUS", "FALLBACK", "FAILED"]);
+
+    const finish = (state: ImportProgressState) => {
+      if (finished) return;
+      finished = true;
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      controller.abort();
+      onDone?.(state);
+    };
+
+    const handleState = (state: ImportProgressState) => {
+      onProgress(state);
+      if (terminalStatuses.has(state.status)) {
+        finish(state);
+      }
+    };
+
+    const startFallbackPolling = () => {
+      if (finished || pollTimer) return;
+      pollTimer = setInterval(async () => {
+        if (finished) return;
+        try {
+          const snap = await apiClient.getImportProgress(importId);
+          handleState(snap);
+        } catch (err: any) {
+          if (!finished && onError) {
+            onError(err instanceof Error ? err : new Error(String(err)));
+          }
+        }
+      }, 750);
+    };
+
+    const headers: Record<string, string> = {
+      Accept: "text/event-stream",
+      "X-User-Role": getCurrentRole(),
+      "X-Actor-Name": getCurrentActorName(),
+    };
+    const token = getAuthToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/imports/${importId}/progress/stream`, {
+          method: "GET",
+          headers,
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) {
+          startFallbackPolling();
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+
+        while (!finished) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() || "";
+
+          for (const frame of frames) {
+            const lines = frame.split("\n");
+            let eventType = "message";
+            const dataLines: string[] = [];
+            for (const line of lines) {
+              if (line.startsWith("event:")) {
+                eventType = line.slice(6).trim();
+              } else if (line.startsWith("data:")) {
+                dataLines.push(line.slice(5).trim());
+              }
+            }
+            if (eventType === "progress" && dataLines.length > 0) {
+              try {
+                const parsed = JSON.parse(dataLines.join("\n")) as ImportProgressState;
+                handleState(parsed);
+              } catch {
+                // Ignore malformed SSE chunk
+              }
+            }
+          }
+        }
+        if (!finished) {
+          startFallbackPolling();
+        }
+      } catch {
+        if (!finished && !controller.signal.aborted) {
+          startFallbackPolling();
+        }
+      }
+    })();
+
+    return () => {
+      finished = true;
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      controller.abort();
+    };
+  },
+
+  uploadImportDocumentWithProgress: (
+    formData: FormData,
+    onUploadPercent?: (percent: number) => void
+  ): Promise<ImportUploadResponse> =>
+    new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${API_BASE}/api/v1/imports/upload`);
+      const token = getAuthToken();
+      if (token) {
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      }
+      xhr.setRequestHeader("X-User-Role", getCurrentRole());
+      xhr.setRequestHeader("X-Actor-Name", getCurrentActorName());
+
+      xhr.upload.onprogress = (ev) => {
+        if (ev.lengthComputable && onUploadPercent) {
+          const pct = Math.min(100, Math.round((ev.loaded / ev.total) * 100));
+          onUploadPercent(pct);
+        }
+      };
+
+      xhr.onload = () => {
+        let data: any = {};
+        try {
+          data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+        } catch {
+          data = {};
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onUploadPercent?.(100);
+          resolve(data as ImportUploadResponse);
+        } else {
+          const msg =
+            typeof data?.detail === "string"
+              ? data.detail
+              : data?.detail?.message || data?.message || `Request failed (${xhr.status})`;
+          reject(new ApiError(xhr.status, msg, data?.detail));
+        }
+      };
+
+      xhr.onerror = () => {
+        reject(new ApiError(0, "Koneksi jaringan terputus saat mengunggah dokumen."));
+      };
+
+      xhr.send(formData);
+    }),
+
+  uploadImportExcel: (formData: FormData) =>
+    request<ImportUploadResponse>("/api/v1/imports/upload", {
+      method: "POST",
+      body: formData,
+    }),
+
+  getImportPreview: (importId: string) =>
+    request<ImportPreviewResponse>(`/api/v1/imports/${importId}/preview`),
+
+  reparseImport: (importId: string, payload: ImportReparseRequest) =>
+    request<ImportPreviewResponse>(`/api/v1/imports/${importId}/reparse`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  confirmImport: (importId: string, payload: ImportConfirmRequest) =>
+    request<ImportConfirmResponse>(`/api/v1/imports/${importId}/confirm`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 
   downloadImportTemplate: async () => {
@@ -452,14 +687,34 @@ export const apiClient = {
       body: JSON.stringify({ formats }),
     }),
 
+  getGenerationJob: (jobId: string) =>
+    request<GenerationJob>(`/api/v1/jobs/${jobId}`),
+
+  getLatestGenerationJob: (revisionId: string) =>
+    request<GenerationJob | null>(`/api/v1/revisions/${revisionId}/jobs/latest`).catch(() => null),
+
   getArtifacts: (revisionId: string) =>
     request<Artifact[]>(`/api/v1/revisions/${revisionId}/artifacts`),
 
-  // Audit Events
-  getAuditEvents: (params?: { entity_name?: string; entity_id?: string; limit?: number }) => {
+  // Audit Events (UC-09)
+  getAuditEvents: (params?: {
+    entity_name?: string;
+    entity_id?: string;
+    action?: string;
+    actor?: string;
+    date_from?: string;
+    date_to?: string;
+    q?: string;
+    limit?: number;
+  }) => {
     const q = new URLSearchParams();
     if (params?.entity_name) q.set("entity_name", params.entity_name);
     if (params?.entity_id) q.set("entity_id", params.entity_id);
+    if (params?.action) q.set("action", params.action);
+    if (params?.actor) q.set("actor", params.actor);
+    if (params?.date_from) q.set("date_from", params.date_from);
+    if (params?.date_to) q.set("date_to", params.date_to);
+    if (params?.q) q.set("q", params.q);
     if (params?.limit) q.set("limit", String(params.limit));
     return request<any[]>(`/api/v1/audit/events?${q.toString()}`).catch(() => []);
   },
@@ -467,8 +722,9 @@ export const apiClient = {
   getPackageAudit: (packageId: string) =>
     request<any[]>(`/api/v1/packages/${packageId}/audit`).catch(() => []),
 
-  // Master Data Management
-  getSchools: () => request<any[]>("/api/v1/masters/schools"),
+  // Master Data Management (FR-01 / UC-01)
+  getSchools: (activeOnly?: boolean) =>
+    request<any[]>(`/api/v1/masters/schools${activeOnly ? "?active_only=true" : ""}`),
 
   createSchool: (payload: {
     name: string;
@@ -598,6 +854,182 @@ export const apiClient = {
       method: "DELETE",
     }),
 
+  deleteSchool: (id: string) =>
+    request<any>(`/api/v1/masters/schools/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Katalog Barang / Items (FR-01 / UC-01)
+  getItems: (params?: { active_only?: boolean; q?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.active_only) qs.set("active_only", "true");
+    if (params?.q) qs.set("q", params.q);
+    const queryStr = qs.toString();
+    return request<any[]>(`/api/v1/masters/items${queryStr ? `?${queryStr}` : ""}`);
+  },
+
+  createItem: (payload: any) =>
+    request<any>("/api/v1/masters/items", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateItem: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/items/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  updateItemPrice: (id: string, reference_price: number) =>
+    request<any>(`/api/v1/masters/items/${id}/price`, {
+      method: "PATCH",
+      body: JSON.stringify({ reference_price }),
+    }),
+
+  deleteItem: (id: string) =>
+    request<any>(`/api/v1/masters/items/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Units
+  getUnits: () => request<any[]>("/api/v1/masters/units"),
+
+  createUnit: (payload: any) =>
+    request<any>("/api/v1/masters/units", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateUnit: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/units/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteUnit: (id: string) =>
+    request<any>(`/api/v1/masters/units/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Budget Classifications (Kode Rekening & Kegiatan BOS/BOP)
+  getBudgets: (params?: { active_only?: boolean; funding_scheme?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.active_only) qs.set("active_only", "true");
+    if (params?.funding_scheme) qs.set("funding_scheme", params.funding_scheme);
+    const queryStr = qs.toString();
+    return request<any[]>(`/api/v1/masters/budgets${queryStr ? `?${queryStr}` : ""}`);
+  },
+
+  createBudget: (payload: any) =>
+    request<any>("/api/v1/masters/budgets", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateBudget: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/budgets/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteBudget: (id: string) =>
+    request<any>(`/api/v1/masters/budgets/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Funding Sources
+  getFundingSources: () => request<any[]>("/api/v1/masters/funding-sources"),
+
+  createFundingSource: (payload: any) =>
+    request<any>("/api/v1/masters/funding-sources", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateFundingSource: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/funding-sources/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteFundingSource: (id: string) =>
+    request<any>(`/api/v1/masters/funding-sources/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Package Profiles & Template Registry (FR-03 / UC-03)
+  getPackageProfiles: () => request<any[]>("/api/v1/masters/package-profiles"),
+
+  updatePackageProfile: (id: string, payload: any) =>
+    request<any>(`/api/v1/masters/package-profiles/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  getTemplates: (fundingScheme?: string) => {
+    const qs = fundingScheme && fundingScheme !== "ALL" ? `?funding_scheme=${fundingScheme}` : "";
+    return request<any[]>(`/api/v1/masters/templates${qs}`);
+  },
+
+  updateTemplateConfig: (docCode: string, payload: any) =>
+    request<any>(`/api/v1/masters/templates/${docCode}/config`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  validateTemplate: (docCode: string, file?: File) => {
+    if (file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<any>(`/api/v1/masters/templates/${docCode}/validate`, {
+        method: "POST",
+        body: formData,
+      });
+    }
+    return request<any>(`/api/v1/masters/templates/${docCode}/validate`, {
+      method: "POST",
+    });
+  },
+
+  uploadTemplate: (docCode: string, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return request<any>(`/api/v1/masters/templates/${docCode}/upload`, {
+      method: "POST",
+      body: formData,
+    });
+  },
+
+  simulateTemplate: (docCode: string, file?: File) => {
+    if (file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<any>(`/api/v1/masters/templates/${docCode}/simulate`, {
+        method: "POST",
+        body: formData,
+      });
+    }
+    return request<any>(`/api/v1/masters/templates/${docCode}/simulate`, {
+      method: "POST",
+    });
+  },
+
   getTaxPolicies: () => request<any[]>("/api/v1/masters/tax-policies"),
+
+  // Google Drive Archive Sync
+  getRevisionArchive: (revisionId: string) =>
+    request<ArchiveRecord | null>(`/api/v1/revisions/${revisionId}/archive`),
+
+  triggerRevisionDriveUpload: (revisionId: string) =>
+    request<ArchiveRecord>(`/api/v1/revisions/${revisionId}/archive/upload`, {
+      method: "POST",
+    }),
+
+  getDriveHealth: () => request<any>("/api/v1/archive/health"),
+
+  disconnectDriveOAuth: () =>
+    request<any>("/api/v1/archive/oauth/disconnect", {
+      method: "POST",
+    }),
 };
 

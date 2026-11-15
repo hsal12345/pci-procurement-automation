@@ -66,10 +66,11 @@ Ruang kerja utama untuk menyusun, memverifikasi, dan mencetak dokumen pengadaan,
   * Unggahan Logo dan Kop Surat Rekanan.
   * Data Direktur Utama / Penanggung Jawab bertanda tangan dan spesimen cap perusahaan.
 
-### 2.5 Menu `/imports` — Impor Spreadsheet
-* **Tujuan**: Mengunggah berkas Excel pengadaan yang sudah ada (seperti contoh `4 PCI KK09.xlsx`) untuk diproses otomatis menjadi draf paket baru.
+### 2.5 Menu `/imports` — Impor Dokumen
+* **Tujuan**: Mengunggah dokumen pengadaan yang sudah ada (`.xlsx`, `.pdf`, `.doc`, `.docx`) untuk diekstrak otomatis menjadi draf paket baru.
 * **Fitur Utama**:
-  * Pengunggahan berkas berekstensi `.xlsx` (maksimal 20 MB).
+  * Pengunggahan berkas berekstensi `.xlsx`, `.pdf`, `.doc`, atau `.docx` (maksimal 20 MB).
+  * **Ekstraksi Konteks & Tabel Pra-LLM**: Kode mengekstrak tabel, kop sekolah, dan metadata dokumen sebelum dipetakan oleh AI secara real-time.
   * **Asisten Pemetaan Cerdas (Smart Column Mapping AI)**: Mendeteksi letak baris header tabel dan memetakan kolom No, Nama Barang, Spesifikasi, Volume, Satuan, Harga HPS, Penawaran, dan Negosiasi secara otomatis.
   * Layar Pratinjau & Resolusi Konflik: Memeriksa baris data sebelum disimpan ke database agar tidak terjadi duplikasi atau kesalahan tafsir sel.
 
@@ -213,10 +214,10 @@ Sistem menerapkan aturan validasi ketat. Pelanggaran kategori **BLOCK** akan men
 7. Buka **Tab Pemeriksaan Sistem** dan klik **"Jalankan Validasi"**. Pastikan semua status berwarna hijau (lolos validasi).
 8. Klik tombol **"Ajukan untuk Persetujuan (Submit)"** agar berkas masuk ke meja Direktur Keuangan.
 
-### 7.2 Bagaimana cara mengimpor berkas Excel (KK09)?
-1. Masuk ke menu **Impor Spreadsheet** (`/imports`).
-2. Tarik dan lepas (drag-and-drop) atau pilih berkas Excel `.xlsx` dari komputer Anda.
-3. Sistem secara cerdas akan menganalisis berkas dan menampilkan **Pratinjau Pemetaan Kolom AI (Smart Mapping)**.
+### 7.2 Bagaimana cara mengimpor dokumen pengadaan (.xlsx, .pdf, .doc, .docx)?
+1. Masuk ke menu **Impor Dokumen** (`/imports`).
+2. Tarik dan lepas (drag-and-drop) atau pilih berkas `.xlsx`, `.pdf`, `.doc`, atau `.docx` dari komputer Anda.
+3. Pantau progres ekstraksi & pemetaan AI secara real-time hingga tampil **Pratinjau Pemetaan Kolom AI (Smart Mapping)**.
 4. Periksa apakah kolom *Nama Barang*, *Kuantitas*, *Satuan*, dan *Harga* sudah terpetakan dengan benar ke lembar HPS.
 5. Jika sudah sesuai, klik tombol **"Konfirmasi & Buat Paket"**.
 6. Paket baru akan langsung terbentuk dengan status `DRAFT` dan dapat disunting di `/packages/[id]`.

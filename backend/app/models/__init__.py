@@ -12,6 +12,7 @@ from app.models.masters import (
     PackageProfile,
     NumberingPolicy,
     NumberCounter,
+    TemplateRegistry,
 )
 from app.models.packages import (
     Package,
@@ -46,6 +47,7 @@ from app.models.archive import (
 )
 from app.models.ai import (
     AIUsageLog,
+    AISemanticAuditReport,
 )
 from app.models.users import (
     User,
@@ -69,6 +71,7 @@ __all__ = [
     "PackageProfile",
     "NumberingPolicy",
     "NumberCounter",
+    "TemplateRegistry",
     "Package",
     "PackageRevision",
     "RevisionLine",
@@ -85,6 +88,7 @@ __all__ = [
     "LogisticsEvidence",
     "ArchiveRecord",
     "AIUsageLog",
+    "AISemanticAuditReport",
     "User",
     "VALID_USER_ROLES",
 ]

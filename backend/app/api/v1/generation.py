@@ -72,3 +72,15 @@ async def get_generation_job_status(job_id: UUID, db: AsyncSession = Depends(get
             detail=f"Job generasi dengan ID {job_id} tidak ditemukan."
         )
     return job
+
+
+@router.get("/revisions/{id}/jobs/latest", response_model=Optional[GenerationJobResponse])
+async def get_latest_revision_generation_job(id: UUID, db: AsyncSession = Depends(get_db)):
+    """Returns the most recent document generation job for a package revision, if any."""
+    res = await db.execute(
+        select(GenerationJob)
+        .where(GenerationJob.revision_id == id)
+        .order_by(GenerationJob.created_at.desc())
+        .limit(1)
+    )
+    return res.scalar_one_or_none()

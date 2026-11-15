@@ -13,7 +13,7 @@ import {
   ArrowUpRight,
   RefreshCw,
   AlertCircle,
-  FileSpreadsheet,
+  FileUp,
   CheckSquare,
   Archive,
   ShieldCheck,
@@ -21,6 +21,9 @@ import {
   Trash2,
   Loader2,
   Plus,
+  Clock,
+  CheckCircle2,
+  TrendingUp,
 } from "lucide-react";
 import { ImportModal } from "@/components/imports/import-modal";
 import { CreatePackageModal } from "@/components/packages/create-package-modal";
@@ -43,6 +46,8 @@ function PackagesListPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [fundSourceFilter, setFundSourceFilter] = useState<string>("ALL");
+  const [quarterFilter, setQuarterFilter] = useState<string>("ALL");
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -112,9 +117,31 @@ function PackagesListPage() {
       schoolName.toLowerCase().includes(search.toLowerCase());
 
     if (!matchesSearch) return false;
+    if (fundSourceFilter !== "ALL" && (pkg.fund_source || "BOS_REGULER") !== fundSourceFilter) {
+      return false;
+    }
+    if (quarterFilter !== "ALL" && String(pkg.quarter) !== quarterFilter) {
+      return false;
+    }
     if (statusFilter === "ALL") return true;
     return currentRev?.status === statusFilter || pkg.status === statusFilter;
   });
+
+  // Executive KPI Summary Metrics (Bab 2 Tabel 2.2, Bab 5.3, Bab 10.2.1)
+  const underReviewCount = packages.filter((p) => {
+    const rev = p.revisions?.[p.revisions.length - 1];
+    return (rev?.status || p.status) === "UNDER_REVIEW";
+  }).length;
+  const approvedOrIssuedCount = packages.filter((p) => {
+    const rev = p.revisions?.[p.revisions.length - 1];
+    const st = rev?.status || p.status;
+    return st === "APPROVED" || st === "ISSUED";
+  }).length;
+  const returnedCount = packages.filter((p) => {
+    const rev = p.revisions?.[p.revisions.length - 1];
+    return (rev?.status || p.status) === "RETURNED";
+  }).length;
+  const savedHoursEstimate = ((packages.length * 45) / 60).toFixed(1);
 
   return (
     <div className="flex flex-col h-full">
@@ -142,8 +169,8 @@ function PackagesListPage() {
             onClick={() => setIsImportOpen(true)}
             className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-card hover:bg-muted text-foreground transition"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Impor Spreadsheet</span>
+            <FileUp className="w-3.5 h-3.5" />
+            <span>Impor Dokumen</span>
           </button>
           <button
             type="button"
@@ -215,10 +242,53 @@ function PackagesListPage() {
         </div>
       )}
 
+      {/* Executive KPI Summary Bar (Direktur Keuangan / Bab 5.3) */}
+      <div className="border-b border-border px-4 py-2.5 bg-muted/15 grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <div className="border border-border rounded-lg bg-card px-3 py-2 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-mono uppercase text-muted-foreground">Total Bundel SPJ</div>
+            <div className="text-lg font-bold font-mono tabular-nums text-foreground">{packages.length}</div>
+          </div>
+          <FolderKanban className="w-5 h-5 text-primary opacity-80" />
+        </div>
+
+        <div className="border border-amber-500/30 rounded-lg bg-card px-3 py-2 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-mono uppercase text-muted-foreground">Menunggu Persetujuan</div>
+            <div className="text-lg font-bold font-mono tabular-nums text-amber-400">
+              {underReviewCount}
+              {returnedCount > 0 && (
+                <span className="text-[10px] font-normal text-red-400 ml-1.5">({returnedCount} Revisi)</span>
+              )}
+            </div>
+          </div>
+          <ShieldCheck className="w-5 h-5 text-amber-400 opacity-80" />
+        </div>
+
+        <div className="border border-emerald-500/30 rounded-lg bg-card px-3 py-2 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-mono uppercase text-muted-foreground">Disetujui &amp; Terbit</div>
+            <div className="text-lg font-bold font-mono tabular-nums text-emerald-400">{approvedOrIssuedCount}</div>
+          </div>
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 opacity-80" />
+        </div>
+
+        <div className="border border-border rounded-lg bg-card px-3 py-2 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-mono uppercase text-muted-foreground">Efisiensi Waktu Kerja</div>
+            <div className="text-lg font-bold font-mono tabular-nums text-sky-400">
+              {savedHoursEstimate} Jam
+              <span className="text-[10px] font-normal text-muted-foreground ml-1">vs 50m manual</span>
+            </div>
+          </div>
+          <TrendingUp className="w-5 h-5 text-sky-400 opacity-80" />
+        </div>
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="border-b border-border px-4 py-2.5 bg-card/40 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2 flex-1 max-w-sm">
-          <div className="relative w-full">
+        <div className="flex items-center gap-2 flex-1 min-w-[260px] flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
             <input
               type="text"
@@ -228,6 +298,32 @@ function PackagesListPage() {
               className="w-full pl-8 pr-3 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-sans transition"
             />
           </div>
+
+          <select
+            value={fundSourceFilter}
+            onChange={(e) => setFundSourceFilter(e.target.value)}
+            className="px-2 py-1.5 bg-background border border-border rounded text-xs font-mono"
+            title="Filter Sumber Dana BOS/BOP"
+          >
+            <option value="ALL">Semua Sumber Dana</option>
+            <option value="BOS_REGULER">BOS_REGULER</option>
+            <option value="BOS_KINERJA">BOS_KINERJA</option>
+            <option value="BOP">BOP</option>
+            <option value="LAINNYA">LAINNYA</option>
+          </select>
+
+          <select
+            value={quarterFilter}
+            onChange={(e) => setQuarterFilter(e.target.value)}
+            className="px-2 py-1.5 bg-background border border-border rounded text-xs font-mono"
+            title="Filter Triwulan"
+          >
+            <option value="ALL">Semua TW</option>
+            <option value="1">TW 1</option>
+            <option value="2">TW 2</option>
+            <option value="3">TW 3</option>
+            <option value="4">TW 4</option>
+          </select>
         </div>
 
         {/* Status Pills Filter */}
@@ -287,7 +383,7 @@ function PackagesListPage() {
                 onClick={() => setIsImportOpen(true)}
                 className="px-2.5 py-1 rounded border border-border bg-card hover:bg-muted text-foreground transition"
               >
-                Impor Spreadsheet
+                Impor Dokumen
               </button>
             </div>
           </div>

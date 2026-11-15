@@ -45,7 +45,7 @@ const ROLE_OPTIONS: Array<{
     badge: "ADMIN",
     badgeClass: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
     capabilities:
-      "Membuat & mengedit draf paket pengadaan, impor spreadsheet Excel, kelola master sekolah/rekanan, validasi aturan, dan cetak 13 dokumen SPJ.",
+      "Membuat & mengedit draf paket pengadaan, impor dokumen pengadaan (.xlsx, .pdf, .doc, .docx), kelola master sekolah/rekanan, validasi aturan, dan cetak 13 dokumen SPJ.",
   },
   {
     value: "FINANCE_DIRECTOR",

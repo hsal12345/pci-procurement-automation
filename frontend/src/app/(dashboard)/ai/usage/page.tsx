@@ -164,6 +164,9 @@ export default function AIUsageDashboard() {
     } else if (newProvider === "openai") {
       setFormBaseUrl("https://api.openai.com/v1");
       setFormModel("gpt-4o-mini");
+    } else if (newProvider === "deepseek") {
+      setFormBaseUrl("https://api.deepseek.com/v1");
+      setFormModel("deepseek-chat");
     } else if (newProvider === "ollama") {
       setFormBaseUrl("http://localhost:11434/v1");
       setFormModel("llama3.2");
@@ -564,7 +567,7 @@ export default function AIUsageDashboard() {
                       </span>
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Google Gemini, OpenRouter, atau OpenAI via Chat Completions API.
+                      Google Gemini, DeepSeek, OpenRouter, atau OpenAI via Chat Completions API.
                     </p>
                   </div>
                 </div>
@@ -664,6 +667,7 @@ export default function AIUsageDashboard() {
                     className="w-full px-3 py-2 bg-background border border-border rounded-md text-xs focus:ring-1 focus:ring-primary outline-none"
                   >
                     <option value="gemini">Google Gemini (Recommended / Default)</option>
+                    <option value="deepseek">DeepSeek API (deepseek-chat / deepseek-reasoner)</option>
                     <option value="openrouter">OpenRouter (Free Tier Models Available)</option>
                     <option value="openai">OpenAI (GPT-4o-mini / GPT-4o)</option>
                     <option value="custom">Custom OpenAI-Compatible API</option>
@@ -722,6 +726,20 @@ export default function AIUsageDashboard() {
                         className="px-2 py-0.5 text-[10px] font-mono bg-muted hover:bg-primary/10 rounded border border-border"
                       >
                         gpt-4o-mini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormModel("deepseek-chat")}
+                        className="px-2 py-0.5 text-[10px] font-mono bg-muted hover:bg-primary/10 rounded border border-border"
+                      >
+                        deepseek-chat
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormModel("deepseek-reasoner")}
+                        className="px-2 py-0.5 text-[10px] font-mono bg-muted hover:bg-primary/10 rounded border border-border"
+                      >
+                        deepseek-reasoner
                       </button>
                     </>
                   ) : (
@@ -1016,7 +1034,7 @@ export default function AIUsageDashboard() {
             ) : (
               <div className="space-y-3">
                 <label className="font-semibold text-foreground">
-                  Daftar Nama Kolom Header Spreadsheet (Pisahkan dengan koma)
+                  Daftar Nama Kolom Header Tabel (Pisahkan dengan koma)
                 </label>
                 <input
                   type="text"

@@ -7,11 +7,13 @@ import app.models  # noqa: F401
 from app.models.masters import School, OfficialAppointment, Company, CompanyOfficial
 from app.models.users import User
 from app.core.security import hash_password
+from app.main import _ensure_schema_columns
 
 
 async def seed():
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await _ensure_schema_columns(conn)
 
     backend_dir = Path(__file__).resolve().parent
     default_school_kop = "/storage/uploads/letterheads/schools/kop_sekolah.png"

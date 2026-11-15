@@ -98,14 +98,23 @@ export function TabLogistics({
 
   const handleSaveLogistics = async () => {
     if (!logistics) return;
+    const effDispatch = logistics.dispatch_date || null;
+    const effReceipt = logistics.receipt_date || logistics.actual_delivery_date || null;
+    if (effDispatch && effReceipt && effReceipt < effDispatch) {
+      alert(
+        `Pelanggaran Alur 4a (UC-10): Tanggal diterima sekolah (${effReceipt}) tidak boleh mendahului tanggal kirim fisik / Surat Jalan (${effDispatch}). Mohon klarifikasi data pengiriman.`
+      );
+      return;
+    }
+
     setIsSavingLogistics(true);
     setSaveSuccess(false);
     try {
       const payload = {
         ...logistics,
-        dispatch_date: logistics.dispatch_date || null,
-        receipt_date: logistics.receipt_date || logistics.actual_delivery_date || null,
-        actual_delivery_date: logistics.receipt_date || logistics.actual_delivery_date || null,
+        dispatch_date: effDispatch,
+        receipt_date: effReceipt,
+        actual_delivery_date: effReceipt,
       };
       const saved = await apiClient.updateLogistics(revision.id, payload);
       setLogistics(saved);
@@ -217,7 +226,21 @@ export function TabLogistics({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div>
+            <label className="block text-[11px] font-mono text-muted-foreground uppercase mb-1">
+              No. Resi / Surat Jalan (UC-10)
+            </label>
+            <input
+              type="text"
+              disabled={isReadOnly}
+              value={logistics?.delivery_reference || ""}
+              onChange={(e) => updateLogisticsField("delivery_reference", e.target.value)}
+              placeholder="08/SJ-PCI/2026"
+              className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono"
+            />
+          </div>
+
           <div>
             <label className="block text-[11px] font-mono text-muted-foreground uppercase mb-1">
               Nama Kurir / Pengantar

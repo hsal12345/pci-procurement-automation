@@ -52,10 +52,19 @@ services:
       AI_BASE_URL: ${AI_BASE_URL:-}
       AI_MODEL: ${AI_MODEL:-google/gemini-2.0-flash-exp:free}
       AI_MONTHLY_BUDGET_USD: ${AI_MONTHLY_BUDGET_USD:-10.0}
+      DRIVE_SYNC_ENABLED: ${DRIVE_SYNC_ENABLED:-true}
+      DRIVE_SYNC_MODE: ${DRIVE_SYNC_MODE:-auto}
+      GOOGLE_DRIVE_CREDENTIALS_PATH: ${GOOGLE_DRIVE_CREDENTIALS_PATH:-credentials/gdrive-service-account.json}
+      GOOGLE_DRIVE_FOLDER_ID_PATH: ${GOOGLE_DRIVE_FOLDER_ID_PATH:-credentials/gdrive-folder-id.txt}
+      GOOGLE_DRIVE_OAUTH_CLIENT_PATH: ${GOOGLE_DRIVE_OAUTH_CLIENT_PATH:-credentials/gdrive-oauth-client.json}
+      GOOGLE_DRIVE_OAUTH_TOKEN_PATH: ${GOOGLE_DRIVE_OAUTH_TOKEN_PATH:-credentials/gdrive-oauth-token.json}
+      GOOGLE_DRIVE_OAUTH_REDIRECT_URI: ${GOOGLE_DRIVE_OAUTH_REDIRECT_URI:-http://localhost:8000/api/v1/archive/oauth/callback}
+      GOOGLE_DRIVE_ROOT_FOLDER_ID: ${GOOGLE_DRIVE_ROOT_FOLDER_ID:-}
     ports:
       - "8000:8000"
     volumes:
       - pci_backend_storage:/app/storage
+      - ../../backend/credentials:/app/credentials
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
