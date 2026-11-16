@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { PackageRevision } from "@/types/package";
+import { PackageRevision, UserRole } from "@/types/package";
 import { Finding, ValidationRun } from "@/types/validation";
 import {
   AIFixApplyResponse,
@@ -40,6 +40,7 @@ import {
 interface TabInspectionProps {
   revision: PackageRevision;
   validationRun?: ValidationRun | null;
+  currentRole?: UserRole;
   isReadOnly?: boolean;
   onRefresh: () => Promise<void>;
   onClearDirty?: () => void;
@@ -57,11 +58,17 @@ const PASSING_GRADE_STORAGE_KEY = "pci_ai_semantic_passing_grade";
 export function TabInspection({
   revision,
   validationRun,
+  currentRole,
   isReadOnly = false,
   onRefresh,
   onClearDirty,
   onNavigateToField,
 }: TabInspectionProps) {
+  const canRunInspection = !currentRole || currentRole !== "LOGISTICS";
+  const canMutateAI =
+    !currentRole ||
+    currentRole === "ADMINISTRATION" ||
+    currentRole === "SYSTEM_ADMINISTRATOR";
   const [activeSubTab, setActiveSubTab] = useState<"compliance" | "ai_audit">("compliance");
   const [isValidating, setIsValidating] = useState(false);
   const [isAuditingAI, setIsAuditingAI] = useState(false);
@@ -87,6 +94,7 @@ export function TabInspection({
 
   // Load latest persisted AI semantic audit report when revision changes
   useEffect(() => {
+    if (!canRunInspection) return;
     let active = true;
     async function loadLatestAudit() {
       try {
@@ -105,7 +113,7 @@ export function TabInspection({
     return () => {
       active = false;
     };
-  }, [revision.id]);
+  }, [revision.id, canRunInspection]);
 
   const allFindings = validationRun?.findings || [];
   const deterministicFindings = allFindings.filter((f) => f.rule_code !== "AI_SEMANTIC_DISCREPANCY");
@@ -399,50 +407,54 @@ export function TabInspection({
       )}
 
       {/* 3. Action Trigger Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-y border-border py-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleRunValidation}
-            disabled={isValidating}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary text-primary-foreground font-medium text-xs hover:opacity-90 transition shadow-xs"
-          >
-            {isValidating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-            <span>Jalankan Validasi Sistem (BR01-BR15)</span>
-          </button>
+      {canRunInspection && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-y border-border py-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRunValidation}
+              disabled={isValidating}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary text-primary-foreground font-medium text-xs hover:opacity-90 transition shadow-xs"
+            >
+              {isValidating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+              <span>Jalankan Validasi Sistem (BR01-BR15)</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={handleRunAIAudit}
-            disabled={isAuditingAI}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-muted hover:bg-muted/80 text-foreground font-medium text-xs border border-border transition shadow-xs"
-          >
-            {isAuditingAI ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> : <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
-            <span>Audit Teks AI (Semantik)</span>
-          </button>
+            <button
+              type="button"
+              onClick={handleRunAIAudit}
+              disabled={isAuditingAI}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-muted hover:bg-muted/80 text-foreground font-medium text-xs border border-border transition shadow-xs"
+            >
+              {isAuditingAI ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> : <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
+              <span>Audit Teks AI (Semantik)</span>
+            </button>
 
+            {canMutateAI && (
+              <button
+                type="button"
+                onClick={() => setIsAutoFixOpen(true)}
+                disabled={isReadOnly}
+                title={isReadOnly ? "Revisi terkunci dan tidak dapat dimodifikasi" : "Jalankan rekomendasi perbaikan otomatis berbasis AI"}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs transition shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                <span>AI Fix Recommendation</span>
+              </button>
+            )}
+          </div>
+
+          {/* Manual Review Recording Fallback Button */}
           <button
             type="button"
-            onClick={() => setIsAutoFixOpen(true)}
-            disabled={isReadOnly}
-            title={isReadOnly ? "Revisi terkunci dan tidak dapat dimodifikasi" : "Jalankan rekomendasi perbaikan otomatis berbasis AI"}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs transition shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setIsRecordingManual(true)}
+            className="flex items-center gap-1 px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded hover:bg-muted/40 transition font-mono"
           >
-            <Wand2 className="w-3.5 h-3.5" />
-            <span>AI Fix Recommendation</span>
+            <FileSignature className="w-3.5 h-3.5 text-sky-400" />
+            <span>Catat Verifikasi Manual</span>
           </button>
         </div>
-
-        {/* Manual Review Recording Fallback Button */}
-        <button
-          type="button"
-          onClick={() => setIsRecordingManual(true)}
-          className="flex items-center gap-1 px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded hover:bg-muted/40 transition font-mono"
-        >
-          <FileSignature className="w-3.5 h-3.5 text-sky-400" />
-          <span>Catat Verifikasi Manual</span>
-        </button>
-      </div>
+      )}
 
       {/* 4. Sub-Tab Navigation Bar */}
       <div className="flex border-b border-border gap-2">
@@ -868,13 +880,15 @@ export function TabInspection({
                   Sistem beralih ke kebijakan verifikasi manual (PRD FR05 &amp; AT16). Anda dapat mencatat verifikasi fisik tanpa memblokir pengajuan paket.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsRecordingManual(true)}
-                className="px-3 py-1.5 rounded bg-amber-500 text-black font-semibold text-xs hover:opacity-90 transition shrink-0"
-              >
-                Catat Verifikasi Manual
-              </button>
+              {canRunInspection && (
+                <button
+                  type="button"
+                  onClick={() => setIsRecordingManual(true)}
+                  className="px-3 py-1.5 rounded bg-amber-500 text-black font-semibold text-xs hover:opacity-90 transition shrink-0"
+                >
+                  Catat Verifikasi Manual
+                </button>
+              )}
             </div>
           )}
 

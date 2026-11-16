@@ -58,6 +58,7 @@ export default function PackageWorkspacePage() {
   const [dirtyIdentity, setDirtyIdentity] = useState<any | null>(null);
   const [dirtyDates, setDirtyDates] = useState<any | null>(null);
   const [dirtyLogistics, setDirtyLogistics] = useState<any | null>(null);
+  const [dirtyLogisticsLines, setDirtyLogisticsLines] = useState<RevisionLine[] | null>(null);
 
   // Modals
   const [isApprovalOpen, setIsApprovalOpen] = useState(false);
@@ -69,12 +70,31 @@ export default function PackageWorkspacePage() {
   // Dispute & Blocking error status
   const [hasLogisticsDispute, setHasLogisticsDispute] = useState(false);
 
+  const canEditPackageContent =
+    currentRole === "ADMINISTRATION" || currentRole === "SYSTEM_ADMINISTRATOR";
+  const canEditLogistics =
+    currentRole === "LOGISTICS" ||
+    currentRole === "ADMINISTRATION" ||
+    currentRole === "SYSTEM_ADMINISTRATOR";
+  const canViewInspectionAndDocs = currentRole !== "LOGISTICS";
+
   useEffect(() => {
-    setCurrentRole(getCurrentRole());
-    const handleRoleChanged = () => setCurrentRole(getCurrentRole());
-    window.addEventListener("pci_role_changed", handleRoleChanged);
-    return () => window.removeEventListener("pci_role_changed", handleRoleChanged);
+    const syncRole = () => setCurrentRole(getCurrentRole());
+    syncRole();
+    window.addEventListener("pci_role_changed", syncRole);
+    window.addEventListener("pci_auth_changed", syncRole);
+    return () => {
+      window.removeEventListener("pci_role_changed", syncRole);
+      window.removeEventListener("pci_auth_changed", syncRole);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!canViewInspectionAndDocs && (activeTab === "inspection" || activeTab === "documents")) {
+      setActiveTab("logistics");
+      router.replace(`/packages/${packageId}?tab=logistics`, { scroll: false });
+    }
+  }, [canViewInspectionAndDocs, activeTab, packageId, router]);
 
   // Fetch package
   const {
@@ -91,16 +111,25 @@ export default function PackageWorkspacePage() {
   const revisions = packageData?.revisions || [];
   const latestRevision = revisions.length > 0 ? revisions[revisions.length - 1] : null;
 
-  // Validation run query
+  // Validation run query (skipped for LOGISTICS per RBAC)
   const { data: validationRun, refetch: refetchValidation } = useQuery<ValidationRun | null>({
     queryKey: ["validation", latestRevision?.id],
     queryFn: () => (latestRevision ? apiClient.validateRevision(latestRevision.id) : null),
-    enabled: Boolean(latestRevision?.id),
+    enabled: Boolean(latestRevision?.id) && canViewInspectionAndDocs,
   });
 
-  const isReadOnly = Boolean(latestRevision?.is_locked);
+  const isLocked = Boolean(latestRevision?.is_locked);
+  const isTabs1to3ReadOnly = isLocked || !canEditPackageContent;
+  const isLogisticsReadOnly = isLocked || !canEditLogistics;
+
+  const visibleTabs = TABS.filter(
+    (tab) => canViewInspectionAndDocs || (tab.key !== "inspection" && tab.key !== "documents")
+  );
 
   const handleTabChange = (key: string) => {
+    if (!canViewInspectionAndDocs && (key === "inspection" || key === "documents")) {
+      return;
+    }
     setActiveTab(key);
     router.replace(`/packages/${packageId}?tab=${key}`, { scroll: false });
   };
@@ -111,7 +140,7 @@ export default function PackageWorkspacePage() {
     setIsSaving(true);
     try {
       let currentVersion = latestRevision.version;
-      if (dirtyLines) {
+      if (canEditPackageContent && dirtyLines) {
         const updated = await apiClient.updateRevisionLines(
           latestRevision.id,
           dirtyLines,
@@ -119,7 +148,7 @@ export default function PackageWorkspacePage() {
         );
         currentVersion = updated.version;
       }
-      if (dirtyIdentity) {
+      if (canEditPackageContent && dirtyIdentity) {
         const updated = await apiClient.updateRevisionDetails(
           latestRevision.id,
           {
@@ -132,7 +161,7 @@ export default function PackageWorkspacePage() {
         );
         currentVersion = updated.version;
       }
-      if (dirtyDates) {
+      if (canEditPackageContent && dirtyDates) {
         const updated = await apiClient.updateRevisionDetails(
           latestRevision.id,
           {
@@ -143,13 +172,24 @@ export default function PackageWorkspacePage() {
         );
         currentVersion = updated.version;
       }
-      if (dirtyLogistics) {
-        const payload = {
-          ...dirtyLogistics,
-          dispatch_date: dirtyLogistics.dispatch_date || null,
-          receipt_date: dirtyLogistics.receipt_date || dirtyLogistics.actual_delivery_date || null,
-          actual_delivery_date: dirtyLogistics.receipt_date || dirtyLogistics.actual_delivery_date || null,
+      if (canEditLogistics && (dirtyLogistics || dirtyLogisticsLines)) {
+        const baseLogistics = dirtyLogistics || {};
+        const payload: any = {
+          ...baseLogistics,
+          dispatch_date: baseLogistics.dispatch_date || null,
+          receipt_date: baseLogistics.receipt_date || baseLogistics.actual_delivery_date || null,
+          actual_delivery_date: baseLogistics.receipt_date || baseLogistics.actual_delivery_date || null,
         };
+        if (dirtyLogisticsLines) {
+          payload.line_updates = dirtyLogisticsLines.map((l) => ({
+            line_number: l.line_number,
+            condition: l.condition || "BAIK",
+            received_quantity:
+              l.received_quantity !== undefined && l.received_quantity !== null
+                ? Number(l.received_quantity)
+                : Number(l.quantity),
+          }));
+        }
         await apiClient.updateLogistics(latestRevision.id, payload);
       }
 
@@ -158,8 +198,11 @@ export default function PackageWorkspacePage() {
       setDirtyIdentity(null);
       setDirtyDates(null);
       setDirtyLogistics(null);
+      setDirtyLogisticsLines(null);
       await refetchPackage();
-      await refetchValidation();
+      if (canViewInspectionAndDocs) {
+        await refetchValidation();
+      }
       return currentVersion;
     } catch (err: any) {
       if (err instanceof ApiError && err.status === 409) {
@@ -176,7 +219,9 @@ export default function PackageWorkspacePage() {
 
   const handleRefreshAll = async () => {
     await refetchPackage();
-    await refetchValidation();
+    if (canViewInspectionAndDocs) {
+      await refetchValidation();
+    }
   };
 
   if (isPkgLoading) {
@@ -231,7 +276,7 @@ export default function PackageWorkspacePage() {
 
       {/* 2. Horizontal Tab Navigation Strip */}
       <div className="border-b border-border bg-card px-4 flex items-center gap-1 overflow-x-auto select-none shadow-sm">
-        {TABS.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
 
@@ -263,7 +308,7 @@ export default function PackageWorkspacePage() {
         {activeTab === "identity" && (
           <TabIdentity
             revision={latestRevision}
-            isReadOnly={isReadOnly}
+            isReadOnly={isTabs1to3ReadOnly}
             onIdentityChanged={(payload) => {
               setDirtyIdentity(payload);
               setIsDirty(true);
@@ -274,7 +319,7 @@ export default function PackageWorkspacePage() {
         {activeTab === "items" && (
           <TabItems
             revision={latestRevision}
-            isReadOnly={isReadOnly}
+            isReadOnly={isTabs1to3ReadOnly}
             onLinesChanged={(newLines) => {
               setDirtyLines(newLines);
               setIsDirty(true);
@@ -285,7 +330,7 @@ export default function PackageWorkspacePage() {
         {activeTab === "dates" && (
           <TabDatesNumbers
             revision={latestRevision}
-            isReadOnly={isReadOnly}
+            isReadOnly={isTabs1to3ReadOnly}
             onDataChanged={(payload) => {
               setDirtyDates(payload);
               setIsDirty(true);
@@ -297,10 +342,10 @@ export default function PackageWorkspacePage() {
           <TabLogistics
             revision={latestRevision}
             currentRole={currentRole}
-            isReadOnly={isReadOnly}
+            isReadOnly={isLogisticsReadOnly}
             onLogisticsDisputeStatusChanged={setHasLogisticsDispute}
             onLinesChanged={(newLines) => {
-              setDirtyLines(newLines);
+              setDirtyLogisticsLines(newLines);
               setIsDirty(true);
             }}
             onLogisticsChanged={(newLogistics) => {
@@ -310,11 +355,12 @@ export default function PackageWorkspacePage() {
           />
         )}
 
-        {activeTab === "inspection" && (
+        {activeTab === "inspection" && canViewInspectionAndDocs && (
           <TabInspection
             revision={latestRevision}
             validationRun={validationRun}
-            isReadOnly={isReadOnly}
+            currentRole={currentRole}
+            isReadOnly={isTabs1to3ReadOnly}
             onRefresh={handleRefreshAll}
             onClearDirty={() => {
               setIsDirty(false);
@@ -322,22 +368,23 @@ export default function PackageWorkspacePage() {
               setDirtyIdentity(null);
               setDirtyDates(null);
               setDirtyLogistics(null);
+              setDirtyLogisticsLines(null);
             }}
             onNavigateToField={(tabKey) => handleTabChange(tabKey)}
           />
         )}
 
-        {activeTab === "documents" && (
+        {activeTab === "documents" && canViewInspectionAndDocs && (
           <TabDocuments
             revision={latestRevision}
             packageData={packageData}
             currentRole={currentRole}
-            isReadOnly={isReadOnly}
+            isReadOnly={isTabs1to3ReadOnly}
           />
         )}
 
         {activeTab === "audit" && (
-          <TabAudit packageId={packageData.id} revision={latestRevision} />
+          <TabAudit packageId={packageData.id} revision={latestRevision} currentRole={currentRole} />
         )}
       </div>
 

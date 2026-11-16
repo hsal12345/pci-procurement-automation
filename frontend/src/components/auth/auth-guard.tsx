@@ -24,15 +24,27 @@ const ROUTE_ROLE_MATRIX: Array<{ prefix: string; roles: UserRole[] }> = [
   },
   {
     prefix: "/schools",
-    roles: ["ADMINISTRATION", "FINANCE_DIRECTOR", "SYSTEM_ADMINISTRATOR"],
+    roles: ["ADMINISTRATION", "SYSTEM_ADMINISTRATOR"],
   },
   {
     prefix: "/companies",
-    roles: ["ADMINISTRATION", "FINANCE_DIRECTOR", "SYSTEM_ADMINISTRATOR"],
+    roles: ["ADMINISTRATION", "SYSTEM_ADMINISTRATOR"],
+  },
+  {
+    prefix: "/catalog",
+    roles: ["ADMINISTRATION", "SYSTEM_ADMINISTRATOR"],
+  },
+  {
+    prefix: "/templates",
+    roles: ["ADMINISTRATION", "SYSTEM_ADMINISTRATOR"],
+  },
+  {
+    prefix: "/audit",
+    roles: ["FINANCE_DIRECTOR", "SYSTEM_ADMINISTRATOR"],
   },
   {
     prefix: "/ai/usage",
-    roles: ["ADMINISTRATION", "FINANCE_DIRECTOR", "SYSTEM_ADMINISTRATOR"],
+    roles: ["FINANCE_DIRECTOR", "SYSTEM_ADMINISTRATOR"],
   },
   {
     prefix: "/packages",

@@ -4,9 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, getCurrentRole } from "@/lib/api-client";
 import { formatIDR, formatShortDateIndo } from "@/lib/formatters";
-import { PackageItem } from "@/types/package";
+import { PackageItem, UserRole } from "@/types/package";
 import {
   FolderKanban,
   Search,
@@ -51,6 +51,21 @@ function PackagesListPage() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [currentRole, setCurrentRole] = useState<UserRole>("ADMINISTRATION");
+
+  useEffect(() => {
+    const syncRole = () => setCurrentRole(getCurrentRole());
+    syncRole();
+    window.addEventListener("pci_role_changed", syncRole);
+    window.addEventListener("pci_auth_changed", syncRole);
+    return () => {
+      window.removeEventListener("pci_role_changed", syncRole);
+      window.removeEventListener("pci_auth_changed", syncRole);
+    };
+  }, []);
+
+  const canManagePackages = currentRole === "ADMINISTRATION" || currentRole === "SYSTEM_ADMINISTRATOR";
+  const canAccessInspectionOrDocs = currentRole !== "LOGISTICS";
 
   const filterParam = searchParams.get("filter")?.toLowerCase() || "";
   const tabParam = searchParams.get("tab")?.toLowerCase() || "";
@@ -97,14 +112,18 @@ function PackagesListPage() {
     }
   }, [filterParam]);
 
-  // Target tab for deep links
-  const targetTab =
+  // Target tab for deep links (LOGISTICS cannot open inspection or documents tabs)
+  const rawTargetTab =
     tabParam ||
     (filterParam === "inspection"
       ? "inspection"
       : filterParam === "document" || filterParam === "documents"
       ? "documents"
       : "");
+  const targetTab =
+    !canAccessInspectionOrDocs && (rawTargetTab === "inspection" || rawTargetTab === "documents")
+      ? "logistics"
+      : rawTargetTab;
 
   const latestPackage = packages.length > 0 ? packages[0] : null;
 
@@ -164,27 +183,31 @@ function PackagesListPage() {
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
-          <button
-            type="button"
-            onClick={() => setIsImportOpen(true)}
-            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-card hover:bg-muted text-foreground transition"
-          >
-            <FileUp className="w-3.5 h-3.5" />
-            <span>Impor Dokumen</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsCreateOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded bg-primary text-primary-foreground hover:opacity-90 transition shadow-xs"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Buat Paket Baru</span>
-          </button>
+          {canManagePackages && (
+            <>
+              <button
+                type="button"
+                onClick={() => setIsImportOpen(true)}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded border border-border bg-card hover:bg-muted text-foreground transition"
+              >
+                <FileUp className="w-3.5 h-3.5" />
+                <span>Impor Dokumen</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreateOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded bg-primary text-primary-foreground hover:opacity-90 transition shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Buat Paket Baru</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Quick Navigation / Filter Banner for deep links */}
-      {(filterParam === "inspection" || tabParam === "inspection") && latestPackage && (
+      {canAccessInspectionOrDocs && (filterParam === "inspection" || tabParam === "inspection") && latestPackage && (
         <div className="bg-primary/10 border-b border-primary/25 px-4 py-2 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2 text-foreground">
             <CheckSquare className="w-4 h-4 text-primary" />
@@ -203,7 +226,7 @@ function PackagesListPage() {
         </div>
       )}
 
-      {(filterParam === "document" || filterParam === "documents" || tabParam === "documents") && latestPackage && (
+      {canAccessInspectionOrDocs && (filterParam === "document" || filterParam === "documents" || tabParam === "documents") && latestPackage && (
         <div className="bg-primary/10 border-b border-primary/25 px-4 py-2 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2 text-foreground">
             <Archive className="w-4 h-4 text-primary" />
@@ -370,22 +393,24 @@ function PackagesListPage() {
         ) : filteredPackages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-muted-foreground text-xs font-mono space-y-2">
             <span>Tidak ada paket pengadaan yang cocok.</span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsCreateOpen(true)}
-                className="px-2.5 py-1 rounded bg-primary text-primary-foreground font-sans font-semibold hover:opacity-90 transition shadow-xs"
-              >
-                + Buat Paket Baru Manual
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsImportOpen(true)}
-                className="px-2.5 py-1 rounded border border-border bg-card hover:bg-muted text-foreground transition"
-              >
-                Impor Dokumen
-              </button>
-            </div>
+            {canManagePackages && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(true)}
+                  className="px-2.5 py-1 rounded bg-primary text-primary-foreground font-sans font-semibold hover:opacity-90 transition shadow-xs"
+                >
+                  + Buat Paket Baru Manual
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsImportOpen(true)}
+                  className="px-2.5 py-1 rounded border border-border bg-card hover:bg-muted text-foreground transition"
+                >
+                  Impor Dokumen
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <table className="w-full text-left border-collapse font-sans text-xs">
@@ -455,7 +480,7 @@ function PackagesListPage() {
                         >
                           <ArrowUpRight className="w-3.5 h-3.5" />
                         </Link>
-                        {isDraft && (
+                        {isDraft && canManagePackages && (
                           <button
                             type="button"
                             onClick={(e) => handleDeletePackage(e, pkg)}

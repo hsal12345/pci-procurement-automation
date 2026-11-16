@@ -203,76 +203,86 @@ export function WorkspaceHeader({
       <div className="px-4 py-1.5 bg-muted/20 flex flex-wrap items-center justify-between gap-2 text-xs">
         {/* Left Action Shortcuts */}
         <div className="flex items-center gap-1.5">
-          {/* Run Validation */}
-          <button
-            type="button"
-            onClick={() => onSwitchTab("inspection")}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground border border-border transition text-[11px] font-medium"
-          >
-            <FileCheck2 className="w-3.5 h-3.5" />
-            <span>Pemeriksaan Sistem</span>
-            {blockingErrorsCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 font-mono text-[9px] border border-red-500/40 font-bold">
-                {blockingErrorsCount} BLOCK
-              </span>
-            )}
-          </button>
-
-          {/* Preview Draft */}
-          <button
-            type="button"
-            onClick={() => onSwitchTab("documents")}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground border border-border transition text-[11px] font-medium"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Pratinjau Dokumen</span>
-          </button>
-
-          {/* Manual Save button if dirty */}
-          {isDraft && !revision.is_locked && (
+          {/* Run Validation (hidden from LOGISTICS) */}
+          {currentRole !== "LOGISTICS" && (
             <button
               type="button"
-              onClick={onSave}
-              disabled={!isDirty || isSaving}
-              className={`px-2.5 py-1 rounded text-[11px] font-medium border transition ${
-                isDirty
-                  ? "bg-primary text-primary-foreground border-primary hover:opacity-90"
-                  : "bg-muted/40 text-muted-foreground border-border cursor-not-allowed"
-              }`}
+              onClick={() => onSwitchTab("inspection")}
+              className="flex items-center gap-1 px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground border border-border transition text-[11px] font-medium"
             >
-              Simpan Perubahan
+              <FileCheck2 className="w-3.5 h-3.5" />
+              <span>Pemeriksaan Sistem</span>
+              {blockingErrorsCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 font-mono text-[9px] border border-red-500/40 font-bold">
+                  {blockingErrorsCount} BLOCK
+                </span>
+              )}
             </button>
           )}
+
+          {/* Preview Draft (hidden from LOGISTICS) */}
+          {currentRole !== "LOGISTICS" && (
+            <button
+              type="button"
+              onClick={() => onSwitchTab("documents")}
+              className="flex items-center gap-1 px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground border border-border transition text-[11px] font-medium"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Pratinjau Dokumen</span>
+            </button>
+          )}
+
+          {/* Manual Save button if dirty (only roles allowed to edit) */}
+          {isDraft &&
+            !revision.is_locked &&
+            (currentRole === "ADMINISTRATION" ||
+              currentRole === "SYSTEM_ADMINISTRATOR" ||
+              currentRole === "LOGISTICS") && (
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={!isDirty || isSaving}
+                className={`px-2.5 py-1 rounded text-[11px] font-medium border transition ${
+                  isDirty
+                    ? "bg-primary text-primary-foreground border-primary hover:opacity-90"
+                    : "bg-muted/40 text-muted-foreground border-border cursor-not-allowed"
+                }`}
+              >
+                Simpan Perubahan
+              </button>
+            )}
         </div>
 
         {/* Right Workflow Actions conditioned on Role & State */}
         <div className="flex items-center gap-2">
-          {/* DRAFT / RETURNED: Admin can submit */}
-          {isDraft && !revision.is_locked && (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting || hasLogisticsDispute || blockingErrorsCount > 0}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-semibold border transition ${
-                hasLogisticsDispute || blockingErrorsCount > 0
-                  ? "bg-muted text-muted-foreground border-border cursor-not-allowed"
-                  : "bg-primary text-primary-foreground border-primary hover:opacity-90"
-              }`}
-              title={
-                hasLogisticsDispute
-                  ? "Pengiriman bermasalah (RUSAK). Tidak dapat diajukan."
-                  : blockingErrorsCount > 0
-                  ? `Terdapat ${blockingErrorsCount} kesalahan memblokir (BLOCK). Perbaiki terlebih dahulu.`
-                  : "Ajukan paket ke Direktur Keuangan untuk persetujuan"
-              }
-            >
-              {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              <span>Ajukan Persetujuan</span>
-            </button>
-          )}
+          {/* DRAFT / RETURNED: Admin / SysAdmin can submit */}
+          {isDraft &&
+            !revision.is_locked &&
+            (currentRole === "ADMINISTRATION" || currentRole === "SYSTEM_ADMINISTRATOR") && (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isSubmitting || hasLogisticsDispute || blockingErrorsCount > 0}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-semibold border transition ${
+                  hasLogisticsDispute || blockingErrorsCount > 0
+                    ? "bg-muted text-muted-foreground border-border cursor-not-allowed"
+                    : "bg-primary text-primary-foreground border-primary hover:opacity-90"
+                }`}
+                title={
+                  hasLogisticsDispute
+                    ? "Pengiriman bermasalah (RUSAK). Tidak dapat diajukan."
+                    : blockingErrorsCount > 0
+                    ? `Terdapat ${blockingErrorsCount} kesalahan memblokir (BLOCK). Perbaiki terlebih dahulu.`
+                    : "Ajukan paket ke Direktur Keuangan untuk persetujuan"
+                }
+              >
+                {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                <span>Ajukan Persetujuan</span>
+              </button>
+            )}
 
-          {/* UNDER_REVIEW: Finance Director can return or approve */}
-          {isUnderReview && (currentRole === "FINANCE_DIRECTOR" || currentRole === "SYSTEM_ADMINISTRATOR") && (
+          {/* UNDER_REVIEW: Exclusive to Finance Director (UC-08 / RUC-03) */}
+          {isUnderReview && currentRole === "FINANCE_DIRECTOR" && (
             <>
               <button
                 type="button"
@@ -293,31 +303,37 @@ export function WorkspaceHeader({
             </>
           )}
 
-          {/* APPROVED: Admin or Finance can issue official documents */}
-          {isApproved && (
-            <button
-              type="button"
-              onClick={handleIssue}
-              disabled={isIssuing || hasLogisticsDispute}
-              className="flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold transition shadow-sm"
-              title="Terbitkan paket dokumen resmi tanpa watermark"
-            >
-              {isIssuing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
-              <span>Terbitkan Dokumen Resmi</span>
-            </button>
-          )}
+          {/* APPROVED: Admin, SysAdmin, or Finance Director can issue official documents */}
+          {isApproved &&
+            (currentRole === "FINANCE_DIRECTOR" ||
+              currentRole === "ADMINISTRATION" ||
+              currentRole === "SYSTEM_ADMINISTRATOR") && (
+              <button
+                type="button"
+                onClick={handleIssue}
+                disabled={isIssuing || hasLogisticsDispute}
+                className="flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold transition shadow-sm"
+                title="Terbitkan paket dokumen resmi tanpa watermark"
+              >
+                {isIssuing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
+                <span>Terbitkan Dokumen Resmi</span>
+              </button>
+            )}
 
-          {/* Reopen New Revision N+1 (Allowed when APPROVED or ISSUED) */}
-          {(isApproved || isIssued) && (
-            <button
-              type="button"
-              onClick={onOpenReopen}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground border border-border text-[11px] font-medium transition"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Buka Revisi Baru</span>
-            </button>
-          )}
+          {/* Reopen New Revision N+1 (Allowed when APPROVED or ISSUED for ADM/DIR/SYS) */}
+          {(isApproved || isIssued) &&
+            (currentRole === "ADMINISTRATION" ||
+              currentRole === "FINANCE_DIRECTOR" ||
+              currentRole === "SYSTEM_ADMINISTRATOR") && (
+              <button
+                type="button"
+                onClick={onOpenReopen}
+                className="flex items-center gap-1 px-2.5 py-1 rounded bg-muted/60 hover:bg-muted text-foreground border border-border text-[11px] font-medium transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Buka Revisi Baru</span>
+              </button>
+            )}
 
           {/* Delete Draft Package (ADMINISTRATION & SYSTEM_ADMINISTRATOR) */}
           {isDraft && (currentRole === "ADMINISTRATION" || currentRole === "SYSTEM_ADMINISTRATOR") && (
@@ -337,18 +353,22 @@ export function WorkspaceHeader({
             </button>
           )}
 
-          {/* Cancel Package (State-contingent RBAC) */}
-          {!isCancelled && !isIssued && (
-            <button
-              type="button"
-              onClick={onOpenCancel}
-              className="flex items-center gap-1 px-2 py-1 rounded hover:bg-red-500/15 text-muted-foreground hover:text-red-400 text-[11px] transition"
-              title="Batalkan paket pengadaan ini"
-            >
-              <XCircle className="w-3.5 h-3.5" />
-              <span>Batalkan</span>
-            </button>
-          )}
+          {/* Cancel Package (State-contingent RBAC: never LOGISTICS; APPROVED only FINANCE_DIRECTOR) */}
+          {!isCancelled &&
+            !isIssued &&
+            (currentRole === "FINANCE_DIRECTOR" ||
+              ((isDraft || isUnderReview) &&
+                (currentRole === "ADMINISTRATION" || currentRole === "SYSTEM_ADMINISTRATOR"))) && (
+              <button
+                type="button"
+                onClick={onOpenCancel}
+                className="flex items-center gap-1 px-2 py-1 rounded hover:bg-red-500/15 text-muted-foreground hover:text-red-400 text-[11px] transition"
+                title="Batalkan paket pengadaan ini"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span>Batalkan</span>
+              </button>
+            )}
         </div>
       </div>
     </header>
