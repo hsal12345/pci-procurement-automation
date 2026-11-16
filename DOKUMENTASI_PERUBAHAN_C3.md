@@ -7,7 +7,7 @@ Dokumen ini mencatat seluruh penambahan dan penyesuaian pada aplikasi **PCI Proc
 1. **Pertahankan Fitur Eksisting**: Fitur yang sudah ada di aplikasi dan tidak dibahas dalam dokumen tetap dipertahankan tanpa dihapus atau diubah secara radikal.
 2. **Penambahan Terfokus**: Fitur yang dibutuhkan dokumen namun belum tersedia atau belum lengkap ditambahkan secara inkremental pada backend maupun frontend.
 3. **Tanpa Perubahan Radikal**: Pola arsitektur FastAPI + SQLAlchemy (backend) dan Next.js 14 App Router (frontend) tetap dipertahankan.
-4. **Integrasi Google Drive Ditunda**: Mekanisme sinkronisasi/outbox yang terdekupel tetap dipertahankan tanpa mengaktifkan koneksi live Google Drive API karena kredensial/key belum dikonfigurasi.
+4. **Integrasi Google Drive (Diaktifkan pada Pembaruan Lanjutan)**: Pada fase awal C3, sinkronisasi Google Drive masih terdekupel tanpa koneksi live; pada commit lanjutan (`461f0df`), integrasi live Google Drive API (Service Account + OAuth 2.0, struktur 4-level folder, timpa revisi, serta kontrol akses RBAC) telah diimplementasikan penuh (lihat `docs/GOOGLE_DRIVE_INTEGRATION_PLAN.md`).
 
 ---
 
@@ -74,7 +74,10 @@ Dokumen ini mencatat seluruh penambahan dan penyesuaian pada aplikasi **PCI Proc
      - Memperbarui `getAuditEvents` dan `getSchools(activeOnly?)`.
      - Menambahkan fungsi API untuk `deleteSchool`, CRUD `items` + `updateItemPrice`, `units`, `budgets`, `fundingSources`, `getPackageProfiles`/`updatePackageProfile`, serta `getTemplates`/`updateTemplateConfig`/`validateTemplate`/`uploadTemplate`/`simulateTemplate`.
    - `frontend/src/components/layout/sidebar.tsx`:
-     - Menambahkan menu navigasi `"Katalog & Anggaran"` (`/catalog`), `"Paket & Template SPJ"` (`/templates`), dan `"Portal Jejak Audit"` (`/audit`).
+     - Menambahkan menu navigasi `"Katalog & Anggaran"` (`/catalog`, akses `ADMINISTRATION`/`SYSTEM_ADMINISTRATOR`), `"Paket & Template SPJ"` (`/templates`, akses `ADMINISTRATION`/`SYSTEM_ADMINISTRATOR`), dan `"Portal Jejak Audit"` (`/audit`, akses `FINANCE_DIRECTOR`/`SYSTEM_ADMINISTRATOR`).
+   - Penyelarasan RBAC & Autentikasi Pasca-C3 (`50d6c75`, `cc53ace`):
+     - Penghapusan tombol isi cepat akun demo pada `/login` (`frontend/src/app/login/page.tsx` — masuk kredensial manual saja).
+     - Penegakan Strict RBAC pada `AuthGuard` (`frontend/src/components/auth/auth-guard.tsx`), tab/aksi workspace paket, dan seluruh router API (`backend/app/api/deps.py`, `backend/app/core/workflow/state_machine.py`, `backend/app/api/v1/*.py`) termasuk persetujuan eksklusif `FINANCE_DIRECTOR` dan pembatalan *state-contingent*.
 
 2. **Halaman Baru**
    - `frontend/src/app/(dashboard)/catalog/page.tsx` *(file baru)*:
@@ -104,13 +107,15 @@ Dokumen ini mencatat seluruh penambahan dan penyesuaian pada aplikasi **PCI Proc
 
 ## Status Integrasi Google Drive
 
-Sesuai prinsip pendekatan pada proyek ini, **integrasi live Google Drive API masih ditunda** karena API key/kredensial belum diatur. Endpoint status dan arsitektur outbox sinkronisasi yang terdekupel tetap dipertahankan agar dapat dihubungkan di fase berikutnya tanpa mengubah alur pembuatan dokumen inti.
+Pada fase awal C3, integrasi live Google Drive API sempat ditunda; pada pembaruan lanjutan (`461f0df`), integrasi live Google Drive API (Service Account + OAuth 2.0, struktur folder 4 level, *overwrite* revisi, serta penegakan RBAC `ADMINISTRATION`/`SYSTEM_ADMINISTRATOR` untuk unggah) telah diimplementasikan penuh dan diuji di `backend/tests/test_drive_sync.py`.
 
 ---
 
-## Hasil Verifikasi Terakhir
+## Hasil Verifikasi (Snapshot Historis C3 & Pembaruan Lanjutan)
 
-- **Kompilasi Sintaks Backend** (`python -m py_compile` terhadap 13 berkas `.py` yang diubah/dibuat): **Lulus** (`PY_COMPILE_OK`, exit code `0`).
-- **Pemeriksaan Tipe TypeScript Frontend** (`npx tsc --noEmit` di `frontend/`): **Lulus** (exit code `0`, tanpa error).
-- **Build Produksi Next.js** (`npm run build` di `frontend/`): **Lulus** (exit code `0`, 17/17 halaman statis termasuk rute `/audit`, `/catalog`, `/templates`, `/packages`, dan rute dinamis `/packages/[id]` berhasil dikompilasi; hanya terdapat warning ESLint `no-unused-vars` / `no-img-element` bawaan).
-- **Catatan Pengujian Runtime Backend (`pytest`)**: Suite tes pada `backend/tests/` belum dapat dijalankan pada mesin lingkungan saat ini karena interpreter Python yang tersedia tidak memiliki dependensi proyek terpasang (`fastapi`, `pytest`). Disarankan menjalankan `pytest` di dalam virtualenv proyek pada lingkungan deployment/pengembangan yang sudah terinstal dependensi `backend/requirements.txt`.
+- **Snapshot Awal C3**:
+  - Kompilasi Sintaks Backend (`python -m py_compile` terhadap 13 berkas `.py`): **Lulus** (`PY_COMPILE_OK`, exit code `0`).
+  - Pemeriksaan Tipe & Build Produksi Frontend: **Lulus** (17 halaman/rute Next.js termasuk `/audit`, `/catalog`, `/templates`, `/packages`, dan `/packages/[id]`).
+- **Verifikasi Lanjutan Pasca-C3 (`50d6c75`, `cc53ace`)**:
+  - Frontend TypeScript (`corepack pnpm exec tsc --noEmit`) & Next.js Build (`corepack pnpm build`): **Lulus** (exit code `0`, 17 rute terkompilasi).
+  - Backend Pytest (`USE_SQLITE_FALLBACK=true pytest`, termasuk `tests/test_rbac_strict.py` dan `tests/test_drive_sync.py`): dijalankan via virtualenv `backend/` dengan cakupan RBAC ketat `403 Forbidden` dan alur Google Drive.
