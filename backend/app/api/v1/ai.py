@@ -8,7 +8,14 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, stat
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.api.deps import get_current_actor_name, get_current_user_role
+from app.api.deps import (
+    get_current_actor_name,
+    get_current_user_role,
+    require_admin_finance_or_sysadmin,
+    require_admin_or_sysadmin,
+    require_finance_or_sysadmin,
+    require_sysadmin_role,
+)
 from app.config import settings
 from app.database import AsyncSessionLocal, get_db
 from app.models.imports import ImportRecord
@@ -47,20 +54,6 @@ from app.services.ai.system_knowledge_service import system_knowledge_service
 from app.services.audit_service import audit_service
 
 router = APIRouter(prefix="/ai", tags=["AI Assistance & Semantic Verification"])
-
-
-def require_admin_or_finance(role: str = Depends(get_current_user_role)) -> str:
-    allowed = {
-        UserRoleEnum.ADMINISTRATION.value,
-        UserRoleEnum.FINANCE_DIRECTOR.value,
-        UserRoleEnum.SYSTEM_ADMINISTRATOR.value
-    }
-    if role not in allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Akses ditolak: Hanya staf Administrasi atau Direktur Keuangan yang berwenang menggunakan fitur AI."
-        )
-    return role
 
 
 RECOMMENDED_MODELS: Dict[str, List[str]] = {
@@ -107,7 +100,7 @@ RECOMMENDED_MODELS: Dict[str, List[str]] = {
 
 @router.get("/config", response_model=AIRuntimeConfigResponse)
 async def get_ai_runtime_config(
-    actor_role: str = Depends(require_admin_or_finance)
+    actor_role: str = Depends(require_finance_or_sysadmin)
 ):
     """Retrieves current AI runtime configuration (API vs Local runtime),
     active provider, model, masked API key, and preset choices.
@@ -132,7 +125,7 @@ async def get_ai_runtime_config(
 async def update_ai_runtime_config(
     payload: AIRuntimeConfigUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance),
+    actor_role: str = Depends(require_sysadmin_role),
     actor_name: str = Depends(get_current_actor_name)
 ):
     """Updates AI runtime configuration dynamically (e.g. toggles between API runtime and
@@ -174,7 +167,7 @@ async def update_ai_runtime_config(
 @router.post("/test-connection", response_model=AITestConnectionResponse)
 async def test_ai_connection(
     payload: Optional[AITestConnectionRequest] = None,
-    actor_role: str = Depends(require_admin_or_finance)
+    actor_role: str = Depends(require_finance_or_sysadmin)
 ):
     """Tests connectivity, responsiveness, and latency for active or candidate AI runtime."""
     test_dict = payload.model_dump(exclude_none=True) if payload else None
@@ -189,7 +182,7 @@ async def test_ai_connection(
 @router.get("/usage", response_model=AIUsageResponse)
 async def get_ai_usage_dashboard(
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance)
+    actor_role: str = Depends(require_finance_or_sysadmin)
 ):
     """Retrieves current month token usage, cumulative costs, remaining budget,
     and service availability for administrative monitoring (PRD Section 11).
@@ -242,7 +235,7 @@ async def list_ai_usage_logs(
     status: Optional[str] = Query(None, description="ALL, SUCCESS, FAILED, TIMEOUT, BUDGET_EXCEEDED, FALLBACK"),
     task_type: Optional[str] = Query(None, description="ALL, MAPPING_ASSISTANT, DISCREPANCY_AUDITOR, PLAYGROUND"),
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance)
+    actor_role: str = Depends(require_finance_or_sysadmin)
 ):
     """Retrieves recent append-only AI execution and telemetry logs from ai_usage_logs."""
     records = await AIBudgetGuard.get_recent_logs(db, limit=limit, status=status, task_type=task_type)
@@ -273,7 +266,7 @@ async def list_ai_usage_logs(
 async def ai_playground_test(
     payload: AIPlaygroundTestRequest,
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance)
+    actor_role: str = Depends(require_finance_or_sysadmin)
 ):
     """Executes a live test against the active AI runtime (either API or Local runtime)
     so users can verify semantic detection or mapping outputs with live telemetry.
@@ -516,7 +509,7 @@ async def ai_suggest_mapping(
     id: UUID,
     payload: Optional[AIMappingSuggestRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance),
+    actor_role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     """Requests an intelligent candidate column mapping proposal from the advisory AI
@@ -565,7 +558,7 @@ async def ai_suggest_mapping_async(
     id: UUID,
     payload: Optional[AIMappingSuggestRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance),
+    actor_role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     """Starts advisory AI column mapping in the background and streams real-time progress
@@ -612,7 +605,7 @@ async def ai_audit_revision(
     id: UUID,
     payload: Optional[SemanticAuditRequest] = Body(default=None),
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance),
+    actor_role: str = Depends(require_admin_finance_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name)
 ):
     """Performs cross-document semantic discrepancy auditing across revision items,
@@ -632,6 +625,7 @@ async def ai_audit_revision(
 async def get_latest_ai_audit(
     id: UUID,
     db: AsyncSession = Depends(get_db),
+    actor_role: str = Depends(require_admin_finance_or_sysadmin),
 ):
     """Retrieves the most recent persisted percentage-based AI semantic audit report."""
     return await SemanticDiscrepancyAuditor.get_latest_report(db=db, revision_id=id)
@@ -642,7 +636,7 @@ async def update_ai_audit_passing_grade(
     id: UUID,
     payload: UpdatePassingGradeRequest,
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance),
+    actor_role: str = Depends(require_admin_finance_or_sysadmin),
 ):
     """Adjusts the passing grade percentage on the latest semantic audit report and re-evaluates pass/fail."""
     updated = await SemanticDiscrepancyAuditor.update_passing_grade(
@@ -662,7 +656,7 @@ async def update_ai_audit_passing_grade(
 async def generate_ai_fix_recommendations(
     id: UUID,
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance),
+    actor_role: str = Depends(require_admin_or_sysadmin),
 ):
     """Generates AI-powered auto-fix reasoning steps and reviewable field changes
     for all deterministic rule violations (BR01-BR15) and semantic discrepancies.
@@ -675,7 +669,7 @@ async def apply_ai_fix_recommendations(
     id: UUID,
     payload: AIFixApplyRequest,
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance),
+    actor_role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     """Applies user-approved AI auto-fix changes to the revision, logs an audit event,
@@ -696,7 +690,7 @@ async def record_manual_review(
     id: UUID,
     payload: ManualReviewRecordRequest,
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance)
+    actor_role: str = Depends(require_admin_finance_or_sysadmin),
 ):
     """Records that staff manually verified textual consistency across procurement documents,
     fulfilling the fallback requirement when AI is unavailable or budget is reached (PRD FR05 and AT16).
@@ -739,7 +733,9 @@ async def record_manual_review(
 # =========================================================================
 
 @router.get("/knowledge", response_model=SystemKnowledgeInfoResponse)
-async def get_system_knowledge():
+async def get_system_knowledge(
+    actor_role: str = Depends(require_admin_finance_or_sysadmin),
+):
     """Retrieves metadata and full markdown text of the system knowledge base
     used by the AI assistant for contextual guidance.
     """
@@ -750,7 +746,7 @@ async def get_system_knowledge():
 async def chat_with_system_knowledge(
     payload: SystemKnowledgeChatRequest,
     db: AsyncSession = Depends(get_db),
-    actor_role: str = Depends(require_admin_or_finance)
+    actor_role: str = Depends(require_admin_finance_or_sysadmin),
 ):
     """Processes a navigation guide or system question against the system knowledge context,
     enforcing strict boundaries and tracking token telemetry.

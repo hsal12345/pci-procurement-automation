@@ -9,7 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.config import settings
 from app.database import get_db
-from app.api.deps import get_current_actor_name
+from app.api.deps import (
+    get_current_actor_name,
+    get_current_user_role,
+    require_admin_or_sysadmin,
+    require_sysadmin_role,
+)
 from app.models.masters import (
     Company,
     CompanyOfficial,
@@ -73,13 +78,20 @@ router = APIRouter(prefix="/masters", tags=["Masters"])
 
 # 1. Companies
 @router.get("/companies", response_model=List[CompanyResponse])
-async def list_companies(db: AsyncSession = Depends(get_db)):
+async def list_companies(
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+):
     result = await db.execute(select(Company))
     return result.scalars().all()
 
 
 @router.post("/companies", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
-async def create_company(payload: CompanyCreate, db: AsyncSession = Depends(get_db)):
+async def create_company(
+    payload: CompanyCreate,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     company_data = payload.model_dump()
     company = Company(**company_data)
     db.add(company)
@@ -103,7 +115,11 @@ async def create_company(payload: CompanyCreate, db: AsyncSession = Depends(get_
 
 
 @router.get("/companies/{id}", response_model=CompanyResponse)
-async def get_company(id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_company(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+):
     result = await db.execute(select(Company).where(Company.id == id))
     company = result.scalar_one_or_none()
     if not company:
@@ -112,7 +128,12 @@ async def get_company(id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/companies/{id}", response_model=CompanyResponse)
-async def update_company(id: UUID, payload: CompanyUpdate, db: AsyncSession = Depends(get_db)):
+async def update_company(
+    id: UUID,
+    payload: CompanyUpdate,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     result = await db.execute(select(Company).where(Company.id == id))
     company = result.scalar_one_or_none()
     if not company:
@@ -156,7 +177,12 @@ async def update_company(id: UUID, payload: CompanyUpdate, db: AsyncSession = De
 
 
 @router.post("/companies/{id}/logo", response_model=CompanyResponse)
-async def upload_company_logo(id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_company_logo(
+    id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     result = await db.execute(select(Company).where(Company.id == id))
     company = result.scalar_one_or_none()
     if not company:
@@ -183,7 +209,11 @@ async def upload_company_logo(id: UUID, file: UploadFile = File(...), db: AsyncS
 
 
 @router.get("/companies/{company_id}/officials", response_model=List[CompanyOfficialResponse])
-async def list_company_officials(company_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_company_officials(
+    company_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+):
     result = await db.execute(
         select(CompanyOfficial).where(
             CompanyOfficial.company_id == company_id,
@@ -213,7 +243,8 @@ async def list_company_officials(company_id: UUID, db: AsyncSession = Depends(ge
 async def create_company_official(
     company_id: UUID,
     payload: CompanyOfficialCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
 ):
     official_data = payload.model_dump()
     official_data["company_id"] = company_id
@@ -229,6 +260,7 @@ async def create_company_official(
 async def list_schools(
     active_only: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
 ):
     query = select(School)
     if active_only:
@@ -241,6 +273,7 @@ async def list_schools(
 async def create_school(
     payload: SchoolCreate,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     if payload.npsn and payload.npsn.strip():
@@ -269,7 +302,11 @@ async def create_school(
 
 
 @router.get("/schools/{id}", response_model=SchoolResponse)
-async def get_school(id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_school(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+):
     result = await db.execute(select(School).where(School.id == id))
     school = result.scalar_one_or_none()
     if not school:
@@ -282,6 +319,7 @@ async def update_school(
     id: UUID,
     payload: SchoolUpdate,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     result = await db.execute(select(School).where(School.id == id))
@@ -323,6 +361,7 @@ async def update_school(
 async def delete_or_deactivate_school(
     id: UUID,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     """UC-01 2a: Entities referenced by transactions are soft-deactivated instead of hard deleted."""
@@ -366,7 +405,12 @@ async def delete_or_deactivate_school(
 
 
 @router.post("/schools/{id}/letterhead", response_model=SchoolResponse)
-async def upload_school_letterhead(id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+async def upload_school_letterhead(
+    id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     result = await db.execute(select(School).where(School.id == id))
     school = result.scalar_one_or_none()
     if not school:
@@ -394,7 +438,11 @@ async def upload_school_letterhead(id: UUID, file: UploadFile = File(...), db: A
 
 # 3. Official Appointments
 @router.get("/schools/{school_id}/officials", response_model=List[OfficialAppointmentResponse])
-async def list_school_officials(school_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_school_officials(
+    school_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+):
     result = await db.execute(
         select(OfficialAppointment).where(OfficialAppointment.school_id == school_id)
     )
@@ -405,7 +453,8 @@ async def list_school_officials(school_id: UUID, db: AsyncSession = Depends(get_
 async def create_school_official(
     school_id: UUID,
     payload: OfficialAppointmentCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
 ):
     official_data = payload.model_dump()
     official_data["school_id"] = school_id
@@ -422,6 +471,7 @@ async def update_school_official(
     official_id: UUID,
     payload: OfficialAppointmentUpdate,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
 ):
     result = await db.execute(
         select(OfficialAppointment).where(
@@ -447,6 +497,7 @@ async def delete_school_official(
     school_id: UUID,
     official_id: UUID,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
 ):
     result = await db.execute(
         select(OfficialAppointment).where(
@@ -469,6 +520,7 @@ async def list_items(
     active_only: bool = Query(default=False),
     q: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
 ):
     query = select(Item)
     if active_only:
@@ -491,6 +543,7 @@ async def list_items(
 async def create_item(
     payload: ItemCreate,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     if payload.sku and payload.sku.strip():
@@ -528,6 +581,7 @@ async def update_item(
     item_id: UUID,
     payload: ItemUpdate,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     res = await db.execute(select(Item).where(Item.id == item_id))
@@ -580,6 +634,7 @@ async def update_item_price(
     item_id: UUID,
     payload: ItemPriceUpdate,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     """Implements KatalogBarang.updateHarga() from Class Diagram Tabel 12.2.1."""
@@ -609,6 +664,7 @@ async def update_item_price(
 async def delete_or_deactivate_item(
     item_id: UUID,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     """UC-01 2a: Soft-deactivate item if referenced in RevisionLine history."""
@@ -653,13 +709,20 @@ async def delete_or_deactivate_item(
 
 # 5. Units
 @router.get("/units", response_model=List[UnitResponse])
-async def list_units(db: AsyncSession = Depends(get_db)):
+async def list_units(
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+):
     result = await db.execute(select(Unit).order_by(Unit.code.asc()))
     return result.scalars().all()
 
 
 @router.post("/units", response_model=UnitResponse, status_code=status.HTTP_201_CREATED)
-async def create_unit(payload: UnitCreate, db: AsyncSession = Depends(get_db)):
+async def create_unit(
+    payload: UnitCreate,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     dup = await db.execute(select(Unit).where(Unit.code == payload.code.strip()))
     if dup.scalar_one_or_none():
         raise HTTPException(
@@ -674,7 +737,12 @@ async def create_unit(payload: UnitCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/units/{unit_id}", response_model=UnitResponse)
-async def update_unit(unit_id: UUID, payload: UnitUpdate, db: AsyncSession = Depends(get_db)):
+async def update_unit(
+    unit_id: UUID,
+    payload: UnitUpdate,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     res = await db.execute(select(Unit).where(Unit.id == unit_id))
     unit = res.scalar_one_or_none()
     if not unit:
@@ -687,7 +755,11 @@ async def update_unit(unit_id: UUID, payload: UnitUpdate, db: AsyncSession = Dep
 
 
 @router.delete("/units/{unit_id}")
-async def delete_unit(unit_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_unit(
+    unit_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     res = await db.execute(select(Unit).where(Unit.id == unit_id))
     unit = res.scalar_one_or_none()
     if not unit:
@@ -703,6 +775,7 @@ async def list_budgets(
     active_only: bool = Query(default=False),
     funding_scheme: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
 ):
     query = select(BudgetClassification)
     if active_only:
@@ -717,6 +790,7 @@ async def list_budgets(
 async def create_budget(
     payload: BudgetClassificationCreate,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     if payload.account_code:
@@ -755,6 +829,7 @@ async def update_budget(
     budget_id: UUID,
     payload: BudgetClassificationUpdate,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     res = await db.execute(select(BudgetClassification).where(BudgetClassification.id == budget_id))
@@ -785,6 +860,7 @@ async def update_budget(
 async def delete_or_deactivate_budget(
     budget_id: UUID,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
     actor_name: str = Depends(get_current_actor_name),
 ):
     res = await db.execute(select(BudgetClassification).where(BudgetClassification.id == budget_id))
@@ -819,13 +895,20 @@ async def delete_or_deactivate_budget(
 
 # 5c. Funding Sources (Sumber Dana BOS / BOP)
 @router.get("/funding-sources", response_model=List[FundingSourceResponse])
-async def list_funding_sources(db: AsyncSession = Depends(get_db)):
+async def list_funding_sources(
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+):
     res = await db.execute(select(FundingSource).order_by(FundingSource.code.asc()))
     return res.scalars().all()
 
 
 @router.post("/funding-sources", response_model=FundingSourceResponse, status_code=status.HTTP_201_CREATED)
-async def create_funding_source(payload: FundingSourceCreate, db: AsyncSession = Depends(get_db)):
+async def create_funding_source(
+    payload: FundingSourceCreate,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     dup = await db.execute(select(FundingSource).where(FundingSource.code == payload.code.strip()))
     if dup.scalar_one_or_none():
         raise HTTPException(
@@ -840,7 +923,12 @@ async def create_funding_source(payload: FundingSourceCreate, db: AsyncSession =
 
 
 @router.put("/funding-sources/{source_id}", response_model=FundingSourceResponse)
-async def update_funding_source(source_id: UUID, payload: FundingSourceUpdate, db: AsyncSession = Depends(get_db)):
+async def update_funding_source(
+    source_id: UUID,
+    payload: FundingSourceUpdate,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     res = await db.execute(select(FundingSource).where(FundingSource.id == source_id))
     fs = res.scalar_one_or_none()
     if not fs:
@@ -853,7 +941,11 @@ async def update_funding_source(source_id: UUID, payload: FundingSourceUpdate, d
 
 
 @router.delete("/funding-sources/{source_id}")
-async def delete_funding_source(source_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_funding_source(
+    source_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     res = await db.execute(select(FundingSource).where(FundingSource.id == source_id))
     fs = res.scalar_one_or_none()
     if not fs:
@@ -870,7 +962,10 @@ async def delete_funding_source(source_id: UUID, db: AsyncSession = Depends(get_
 
 # 5d. Package Profiles & Document Templates Registry (FR-03 / UC-03)
 @router.get("/package-profiles", response_model=List[PackageProfileResponse])
-async def list_package_profiles(db: AsyncSession = Depends(get_db)):
+async def list_package_profiles(
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     res = await db.execute(select(PackageProfile).order_by(PackageProfile.code.asc()))
     return res.scalars().all()
 
@@ -880,6 +975,7 @@ async def update_package_profile(
     profile_id: UUID,
     payload: PackageProfileUpdate,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_sysadmin_role),
     actor_name: str = Depends(get_current_actor_name),
 ):
     res = await db.execute(select(PackageProfile).where(PackageProfile.id == profile_id))
@@ -908,6 +1004,7 @@ async def update_package_profile(
 async def list_templates(
     funding_scheme: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
 ):
     query = select(TemplateRegistry)
     if funding_scheme and funding_scheme.upper() != "ALL":
@@ -921,6 +1018,7 @@ async def update_template_config(
     doc_code: str,
     payload: TemplateConfigUpdate,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_sysadmin_role),
     actor_name: str = Depends(get_current_actor_name),
 ):
     code = doc_code.upper()
@@ -953,6 +1051,7 @@ async def validate_template_file(
     doc_code: str,
     file: Optional[UploadFile] = File(default=None),
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
 ):
     code = doc_code.upper()
     if code not in DOCUMENT_MAP:
@@ -979,6 +1078,7 @@ async def upload_and_activate_template(
     doc_code: str,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_sysadmin_role),
     actor_name: str = Depends(get_current_actor_name),
 ):
     """UC-03: Validates .docx Jinja2 tokens (rejecting on Alur 4a unknown/broken syntax),
@@ -1058,6 +1158,7 @@ async def simulate_template(
     doc_code: str,
     download: bool = Query(default=False),
     file: Optional[UploadFile] = File(default=None),
+    role: str = Depends(require_admin_or_sysadmin),
 ):
     """UC-03 Step 5: Generates preview simulation of merged template using sample transaction context."""
     code = doc_code.upper()
@@ -1090,7 +1191,10 @@ async def simulate_template(
 
 # 6. Tax Policies
 @router.get("/tax-policies", response_model=List[TaxPolicyVersionResponse])
-async def list_tax_policies(db: AsyncSession = Depends(get_db)):
+async def list_tax_policies(
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+):
     result = await db.execute(select(TaxPolicyVersion))
     policies = result.scalars().all()
     if not policies:
@@ -1122,7 +1226,11 @@ async def list_tax_policies(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/tax-policies", response_model=TaxPolicyVersionResponse, status_code=status.HTTP_201_CREATED)
-async def create_tax_policy(payload: TaxPolicyVersionCreate, db: AsyncSession = Depends(get_db)):
+async def create_tax_policy(
+    payload: TaxPolicyVersionCreate,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     policy = TaxPolicyVersion(**payload.model_dump())
     db.add(policy)
     await db.commit()
@@ -1132,6 +1240,9 @@ async def create_tax_policy(payload: TaxPolicyVersionCreate, db: AsyncSession = 
 
 # 7. Number Counters
 @router.get("/counters", response_model=List[NumberCounterResponse])
-async def list_number_counters(db: AsyncSession = Depends(get_db)):
+async def list_number_counters(
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+):
     result = await db.execute(select(NumberCounter))
     return result.scalars().all()

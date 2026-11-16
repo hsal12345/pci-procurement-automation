@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, or_
 from app.database import get_db
-from app.api.deps import get_current_user_role
+from app.api.deps import get_current_user_role, require_finance_or_sysadmin
 from app.models.packages import Package, PackageRevision
 from app.models.audit import AuditEvent
 from app.schemas.audit import AuditEventResponse
@@ -44,7 +44,7 @@ async def list_audit_events(
     q: Optional[str] = None,
     limit: int = Query(default=200, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_finance_or_sysadmin),
 ):
     """Lists append-only audit events with UC-09 multi-criteria search (periode, entitas, aksi, aktor, kata kunci)."""
     query = select(AuditEvent)

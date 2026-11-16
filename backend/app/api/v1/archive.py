@@ -9,7 +9,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_actor_name, get_current_user_role
+from app.api.deps import (
+    get_current_actor_name,
+    get_current_user_role,
+    require_admin_finance_or_sysadmin,
+)
 from app.config import settings
 from app.database import get_db
 from app.models.archive import ArchiveRecord
@@ -42,6 +46,7 @@ def _to_archive_response(
 async def get_revision_archive_status(
     revision_id: UUID,
     db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_finance_or_sysadmin),
 ):
     """Returns the Google Drive archive status and real-time upload progress for a revision."""
     rev_res = await db.execute(
@@ -180,7 +185,9 @@ async def upload_revision_to_google_drive(
 
 
 @router.get("/archive/health")
-async def check_google_drive_health() -> Dict[str, Any]:
+async def check_google_drive_health(
+    role: str = Depends(require_admin_finance_or_sysadmin),
+) -> Dict[str, Any]:
     """Checks Google Drive OAuth 2.0 / Service Account connectivity, root folder access, and quota status."""
     return await google_drive_service.check_health()
 
