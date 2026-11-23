@@ -275,10 +275,10 @@ function PackagesListPage() {
 
         <div className="border border-border rounded-lg bg-card px-3 py-2 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-mono uppercase text-muted-foreground">Efisiensi Waktu Kerja</div>
+            <div className="text-[10px] font-mono uppercase text-muted-foreground">Total Waktu Dihemat</div>
             <div className="text-lg font-bold font-mono tabular-nums text-sky-400">
               {savedHoursEstimate} Jam
-              <span className="text-[10px] font-normal text-muted-foreground ml-1">vs 50m manual</span>
+              <span className="text-[10px] font-normal text-muted-foreground ml-1.5">~5m/paket (vs 50m manual)</span>
             </div>
           </div>
           <TrendingUp className="w-5 h-5 text-sky-400 opacity-80" />

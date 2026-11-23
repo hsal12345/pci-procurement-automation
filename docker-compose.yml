@@ -85,7 +85,7 @@ services:
       - no-new-privileges:true
 
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:alpine
     container_name: pci-procurement-nginx
     restart: unless-stopped
     ports:
