@@ -37,7 +37,7 @@ const ROLE_OPTIONS: Array<{
     badge: "SYSADMIN",
     badgeClass: "bg-red-500/15 text-red-300 border-red-500/30",
     capabilities:
-      "Akses penuh ke seluruh modul sistem, pengaturan master data, persetujuan darurat, serta manajemen akun pengguna & RBAC.",
+      "Akses penuh konfigurasi sistem & runtime AI, manajemen akun pengguna & RBAC, template dokumen SPJ, master data, serta peninjauan jejak audit.",
   },
   {
     value: "ADMINISTRATION",
@@ -45,7 +45,7 @@ const ROLE_OPTIONS: Array<{
     badge: "ADMIN",
     badgeClass: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
     capabilities:
-      "Membuat & mengedit draf paket pengadaan, impor dokumen pengadaan (.xlsx, .pdf, .doc, .docx), kelola master sekolah/rekanan, validasi aturan, dan cetak 13 dokumen SPJ.",
+      "Membuat & mengedit draf paket pengadaan, impor dokumen (.xlsx, .pdf, .doc, .docx), kelola master sekolah/rekanan/katalog, validasi aturan, pengajuan review, dan cetak 13 dokumen SPJ.",
   },
   {
     value: "FINANCE_DIRECTOR",
@@ -53,7 +53,7 @@ const ROLE_OPTIONS: Array<{
     badge: "DIREKTUR",
     badgeClass: "bg-amber-500/15 text-amber-300 border-amber-500/30",
     capabilities:
-      "Meninjau paket Under Review, menyetujui (Approve) atau mengembalikan (Return) revisi, menerbitkan SPJ (Issue), membuka kembali (Reopen), dan membatalkan paket.",
+      "Otoritas eksklusif meninjau paket Under Review, menyetujui (Approve) atau mengembalikan (Return) revisi, menerbitkan SPJ (Issue), membuka kembali (Reopen), membatalkan paket, dan meninjau jejak audit.",
   },
   {
     value: "LOGISTICS",
@@ -61,7 +61,7 @@ const ROLE_OPTIONS: Array<{
     badge: "LOGISTIK",
     badgeClass: "bg-blue-500/15 text-blue-300 border-blue-500/30",
     capabilities:
-      "Mencatat fakta pengiriman (Surat Jalan, kurir, pelat kendaraan), hasil pemeriksaan barang (BAPB), dan mengunggah foto bukti serah terima lapangan.",
+      "Mencatat fakta pengiriman (Surat Jalan, kurir, pelat kendaraan), hasil pemeriksaan fisik barang (BAPB), dan mengunggah foto bukti serah terima lapangan.",
   },
 ];
 

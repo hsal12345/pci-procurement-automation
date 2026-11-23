@@ -91,6 +91,11 @@ export function TabDocuments({ revision, packageData, currentRole }: TabDocument
     revision.status === "RETURNED";
   const isApprovedForDrive =
     revision.status === "APPROVED" || revision.status === "ISSUED";
+  const canGenerateDocuments =
+    !currentRole ||
+    currentRole === "ADMINISTRATION" ||
+    currentRole === "FINANCE_DIRECTOR" ||
+    currentRole === "SYSTEM_ADMINISTRATOR";
   const canTriggerDriveUpload =
     !currentRole ||
     currentRole === "ADMINISTRATION" ||
@@ -509,25 +514,27 @@ export function TabDocuments({ revision, packageData, currentRole }: TabDocument
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
           </button>
 
-          <button
-            type="button"
-            onClick={handleTriggerGeneration}
-            disabled={isGenerating || isJobActive}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary text-primary-foreground font-semibold text-xs hover:opacity-90 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isGenerating || isJobActive ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Printer className="w-3.5 h-3.5" />
-            )}
-            <span>
-              {isJobActive
-                ? `Memproses Dokumen (${effectiveProgress}%)...`
-                : isGenerating
-                ? "Memulai Antrean..."
-                : "Hasilkan Seluruh Dokumen (Generate)"}
-            </span>
-          </button>
+          {canGenerateDocuments && (
+            <button
+              type="button"
+              onClick={handleTriggerGeneration}
+              disabled={isGenerating || isJobActive}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary text-primary-foreground font-semibold text-xs hover:opacity-90 transition shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isGenerating || isJobActive ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Printer className="w-3.5 h-3.5" />
+              )}
+              <span>
+                {isJobActive
+                  ? `Memproses Dokumen (${effectiveProgress}%)...`
+                  : isGenerating
+                  ? "Memulai Antrean..."
+                  : "Hasilkan Seluruh Dokumen (Generate)"}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -723,15 +730,17 @@ export function TabDocuments({ revision, packageData, currentRole }: TabDocument
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleTriggerGeneration}
-              disabled={isGenerating || isJobActive}
-              className="px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-semibold text-[11px] transition flex items-center gap-1.5 flex-shrink-0"
-            >
-              <RefreshCw className="w-3 h-3" />
-              <span>Coba Lagi</span>
-            </button>
+            {canGenerateDocuments && (
+              <button
+                type="button"
+                onClick={handleTriggerGeneration}
+                disabled={isGenerating || isJobActive}
+                className="px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-semibold text-[11px] transition flex items-center gap-1.5 flex-shrink-0"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Coba Lagi</span>
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -412,10 +412,17 @@ async def test_ai_api_endpoints():
     """Tests REST endpoints: /usage, /revisions/{id}/audit, /imports/{id}/suggest-mapping."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # 1. GET /api/v1/ai/usage
+        # 1. GET /api/v1/ai/usage (restricted to FINANCE_DIRECTOR & SYSTEM_ADMINISTRATOR)
+        for forbidden_role in ("ADMINISTRATION", "LOGISTICS"):
+            resp_forb = await client.get(
+                "/api/v1/ai/usage",
+                headers={"X-User-Role": forbidden_role}
+            )
+            assert resp_forb.status_code == 403
+
         resp_usage = await client.get(
             "/api/v1/ai/usage",
-            headers={"X-User-Role": "ADMINISTRATION"}
+            headers={"X-User-Role": "FINANCE_DIRECTOR"}
         )
         assert resp_usage.status_code == 200
         usage_data = resp_usage.json()

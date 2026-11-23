@@ -206,7 +206,7 @@ class WorkflowStateMachine:
         """Transitions UNDER_REVIEW -> RETURNED.
         Allows Finance Director to return package with mandatory correction comments.
         """
-        if actor_role not in (UserRoleEnum.FINANCE_DIRECTOR.value, UserRoleEnum.SYSTEM_ADMINISTRATOR.value):
+        if actor_role != UserRoleEnum.FINANCE_DIRECTOR.value:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Hanya Direktur Keuangan yang berwenang mengembalikan paket dokumen pengadaan."
@@ -272,7 +272,7 @@ class WorkflowStateMachine:
         """Transitions UNDER_REVIEW -> APPROVED.
         Enforces role FINANCE_DIRECTOR, binds revision to manifest hash, and locks revision permanently.
         """
-        if actor_role not in (UserRoleEnum.FINANCE_DIRECTOR.value, UserRoleEnum.SYSTEM_ADMINISTRATOR.value):
+        if actor_role != UserRoleEnum.FINANCE_DIRECTOR.value:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Hanya Direktur Keuangan yang berwenang menyetujui paket pengadaan."
@@ -493,10 +493,21 @@ class WorkflowStateMachine:
         expected_version: Optional[int] = None
     ) -> Package:
         """State-contingent cancellation RBAC:
-        - If current revision is DRAFT or RETURNED: ADMINISTRATION or FINANCE_DIRECTOR allowed.
+        - LOGISTICS is unconditionally blocked (403 Forbidden).
+        - If current revision is DRAFT, RETURNED, or UNDER_REVIEW: ADMINISTRATION, FINANCE_DIRECTOR, or SYSTEM_ADMINISTRATOR allowed.
         - If current revision is APPROVED or ISSUED: ONLY FINANCE_DIRECTOR allowed.
         Marks document numbers as non-reusable.
         """
+        if actor_role not in (
+            UserRoleEnum.ADMINISTRATION.value,
+            UserRoleEnum.FINANCE_DIRECTOR.value,
+            UserRoleEnum.SYSTEM_ADMINISTRATOR.value,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Peran Bagian Logistik tidak berwenang membatalkan paket pengadaan."
+            )
+
         if not reason or len(reason.strip()) < 3:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -535,7 +546,7 @@ class WorkflowStateMachine:
 
         # State-contingent RBAC:
         if current_status in (RevisionStatusEnum.APPROVED.value, RevisionStatusEnum.ISSUED.value):
-            if actor_role not in (UserRoleEnum.FINANCE_DIRECTOR.value, UserRoleEnum.SYSTEM_ADMINISTRATOR.value):
+            if actor_role != UserRoleEnum.FINANCE_DIRECTOR.value:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Hanya Direktur Keuangan yang berwenang membatalkan paket yang telah disetujui atau diterbitkan."

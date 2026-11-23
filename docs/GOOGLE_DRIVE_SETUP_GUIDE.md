@@ -80,7 +80,7 @@ Panduan ini menjelaskan langkah-langkah yang perlu Anda lakukan untuk mendapatka
 > Google Drive memberikan kuota **0 byte** kepada Service Account di My Drive pribadi, sehingga upload file penuh ditolak (`403 storageQuotaExceeded`) atau hanya menghasilkan file `0 byte` jika tanpa autentikasi user. Agar file SPJ terunggah dengan **ukuran penuh**, hubungkan akun Google pemilik folder via **OAuth 2.0**.
 
 1. Buka [Google Drive](https://drive.google.com/) → buat folder induk (contoh: `pci-storage`), salin **Folder ID**-nya ke `backend/credentials/gdrive-folder-id.txt`.
-2. Di **Google Cloud Console** project Anda (`pci-procurement-automation`), buka **APIs & Services** → **OAuth consent screen**:
+2. Di **Google Cloud Console** project Anda (`pci-procurement-drive-sync`), buka **APIs & Services** → **OAuth consent screen**:
    - Pilih **External** → klik **Create**.
    - Isi App name (`PCI Procurement Drive Sync`), User support email & Developer email → **Save and Continue**.
    - Pada bagian **Scopes**, tambahkan `https://www.googleapis.com/auth/drive` → **Save and Continue**.
@@ -121,6 +121,7 @@ Panduan ini menjelaskan langkah-langkah yang perlu Anda lakukan untuk mendapatka
    DRIVE_SYNC_ENABLED=true
    DRIVE_SYNC_MODE=live
    GOOGLE_DRIVE_CREDENTIALS_PATH=credentials/gdrive-service-account.json
+   GOOGLE_DRIVE_FOLDER_ID_PATH=credentials/gdrive-folder-id.txt
    GOOGLE_DRIVE_OAUTH_CLIENT_PATH=credentials/gdrive-oauth-client.json
    GOOGLE_DRIVE_OAUTH_TOKEN_PATH=credentials/gdrive-oauth-token.json
    GOOGLE_DRIVE_OAUTH_REDIRECT_URI=http://localhost:8000/api/v1/archive/oauth/callback
@@ -138,11 +139,11 @@ Panduan ini menjelaskan langkah-langkah yang perlu Anda lakukan untuk mendapatka
 ## Langkah 6: Verifikasi Setelah Implementasi Selesai
 
 1. **Cek Kesehatan Koneksi & Kuota**:
-   - Panggil `GET http://localhost:8000/api/v1/archive/health` dan pastikan `"connected": true` serta `"can_upload_binary": true`.
+   - Panggil `GET http://localhost:8000/api/v1/archive/health` (dengan token Bearer peran `ADMINISTRATION`, `FINANCE_DIRECTOR`, atau `SYSTEM_ADMINISTRATOR` — atau header `X-User-Role` saat pengujian lokal) dan pastikan `"connected": true` serta `"can_upload_binary": true`.
 2. **Generate Lokal Terlebih Dahulu**:
    - Generate dokumen selalu menyimpan lokal (`29` berkas) terlebih dahulu dan **tidak** langsung mengunggah ke Google Drive.
-3. **Uji Unggah Manual ke Google Drive (Status `APPROVED`, Peran Admin / SysAdmin)**:
-   - Pastikan revisi berstatus `APPROVED`, buka tab **Dokumen**, dan klik **"Unggah Paket ke Google Drive"**.
+3. **Uji Unggah Manual ke Google Drive (Status `APPROVED` / `ISSUED`, Peran Admin / SysAdmin)**:
+   - Pastikan revisi berstatus `APPROVED` atau `ISSUED`, buka tab **6. Dokumen & Generator**, dan klik **"Unggah Paket ke Google Drive"**.
    - Pantau progress bar real-time (`10% -> 100%`) dan pastikan struktur folder `Lv1 ({Sekolah}) -> Lv2 ({Tahun}) -> Lv3 (Triwulan {Triwulan}) -> Lv4 (Berkas SPJ)` terunggah dengan ukuran non-zero bytes.
    - Uji unggah ulang / revisi baru dan pastikan berkas lama di Drive **tertimpa (overwrite)** tanpa duplikat.
 

@@ -6,7 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.api.deps import get_current_user_role
+from app.api.deps import (
+    get_current_actor_name,
+    get_current_user_role,
+    require_logistics_admin_or_sysadmin,
+)
 from app.models.logistics import LogisticsRecord, LogisticsEvidence
 from app.schemas.logistics import (
     LogisticsFactsUpdate,
@@ -82,7 +86,8 @@ async def update_logistics_record(
     payload: LogisticsFactsUpdate,
     id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_logistics_admin_or_sysadmin),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Updates dispatch dates, receipt confirmation, driver/vehicle details,
     line item conditions (BAIK/RUSAK), and physical received quantities.
@@ -93,7 +98,7 @@ async def update_logistics_record(
         revision_id=revision_id,
         payload=payload,
         actor_role=role,
-        actor_name=f"User ({role})"
+        actor_name=actor_name
     )
     return record
 
@@ -115,7 +120,8 @@ async def upload_logistics_evidence(
     evidence_type: str = Form(default="DELIVERY_PHOTO"),
     description: Optional[str] = Form(default=None),
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_logistics_admin_or_sysadmin),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Uploads photo or document evidence for delivery and physical inspection
     (supports JPEG, PNG, PDF up to 10 MB).
@@ -127,7 +133,7 @@ async def upload_logistics_evidence(
         evidence_type=evidence_type,
         description=description,
         actor_role=role,
-        actor_name=f"User ({role})"
+        actor_name=actor_name
     )
     return evidence
 

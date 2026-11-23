@@ -13,7 +13,7 @@ from app.schemas.validation import (
     FindingDispositionRequest,
 )
 from app.core.rules.engine import run_deterministic_validation
-from app.api.deps import get_current_user_role
+from app.api.deps import require_admin_finance_or_sysadmin
 
 router = APIRouter(tags=["Validation"])
 
@@ -22,7 +22,7 @@ router = APIRouter(tags=["Validation"])
 async def validate_revision(
     id: UUID,
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_admin_finance_or_sysadmin),
 ):
     """Triggers the deterministic validation engine (rules BR01 through BR15)
     against the revision snapshot and persists the run along with any findings.
@@ -134,7 +134,11 @@ async def validate_revision(
 
 
 @router.get("/revisions/{id}/findings", response_model=List[FindingResponse])
-async def get_revision_findings(id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_revision_findings(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_finance_or_sysadmin),
+):
     """Retrieves all findings from the latest validation run of this revision."""
     res_run = await db.execute(
         select(ValidationRun)
@@ -155,7 +159,8 @@ async def get_revision_findings(id: UUID, db: AsyncSession = Depends(get_db)):
 async def update_finding_disposition(
     finding_id: UUID,
     payload: FindingDispositionRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_finance_or_sysadmin),
 ):
     """Allows finance director or administration to record justification
     and disposition for a warning finding.

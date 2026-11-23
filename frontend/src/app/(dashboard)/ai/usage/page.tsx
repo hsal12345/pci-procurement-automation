@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, getCurrentRole } from "@/lib/api-client";
+import { UserRole } from "@/types/package";
 import {
   AIUsageResponse,
   AIRuntimeConfig,
@@ -43,6 +44,22 @@ import { SystemKnowledgeChatTab } from "./system-knowledge-chat";
 export default function AIUsageDashboard() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"runtime" | "playground" | "logs" | "audit" | "knowledge_chat">("runtime");
+  const [currentRole, setCurrentRole] = useState<UserRole>("FINANCE_DIRECTOR");
+
+  useEffect(() => {
+    const syncRole = () => setCurrentRole(getCurrentRole());
+    syncRole();
+    window.addEventListener("pci_role_changed", syncRole);
+    window.addEventListener("pci_auth_changed", syncRole);
+    return () => {
+      window.removeEventListener("pci_role_changed", syncRole);
+      window.removeEventListener("pci_auth_changed", syncRole);
+    };
+  }, []);
+
+  const isSystemAdmin = currentRole === "SYSTEM_ADMINISTRATOR";
+  const canViewAudit =
+    currentRole === "FINANCE_DIRECTOR" || currentRole === "SYSTEM_ADMINISTRATOR";
 
   // Telemetry logs filters
   const [logStatusFilter, setLogStatusFilter] = useState<string>("ALL");
@@ -90,6 +107,7 @@ export default function AIUsageDashboard() {
   const { data: auditEvents, isLoading: isAuditLoading, refetch: refetchAudit } = useQuery<any[]>({
     queryKey: ["system_audit_events"],
     queryFn: () => apiClient.getAuditEvents({ limit: 50 }),
+    enabled: canViewAudit,
   });
 
   // Local form state initialized from config
@@ -207,6 +225,7 @@ export default function AIUsageDashboard() {
 
   // Save Configuration
   const handleSaveConfig = () => {
+    if (!isSystemAdmin) return;
     updateConfigMutation.mutate({
       runtime_mode: formMode,
       provider: formProvider,
@@ -311,7 +330,7 @@ export default function AIUsageDashboard() {
               refetchUsage();
               refetchConfig();
               refetchLogs();
-              refetchAudit();
+              if (canViewAudit) refetchAudit();
             }}
             className="p-1.5 text-muted-foreground hover:text-foreground rounded-md border border-border hover:bg-muted"
             title="Muat Ulang Data"
@@ -510,18 +529,20 @@ export default function AIUsageDashboard() {
           <span>Log Telemetri AI</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("audit")}
-          className={`flex items-center gap-2 px-4 py-2.5 font-medium border-b-2 -mb-px text-xs transition ${
-            activeTab === "audit"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-          }`}
-        >
-          <FileCheck2 className="w-4 h-4" />
-          <span>Jejak Audit Sistem</span>
-        </button>
+        {canViewAudit && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("audit")}
+            className={`flex items-center gap-2 px-4 py-2.5 font-medium border-b-2 -mb-px text-xs transition ${
+              activeTab === "audit"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+            }`}
+          >
+            <FileCheck2 className="w-4 h-4" />
+            <span>Jejak Audit Sistem</span>
+          </button>
+        )}
 
         <button
           type="button"
@@ -543,12 +564,26 @@ export default function AIUsageDashboard() {
       {/* TAB 1: RUNTIME CONFIGURATION */}
       {activeTab === "runtime" && (
         <div className="space-y-6">
+          {!isSystemAdmin && (
+            <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs flex items-center gap-2 font-mono">
+              <ShieldAlert className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              <span>
+                Mode Baca Saja: Hanya <strong>SYSTEM_ADMINISTRATOR</strong> yang berwenang mengubah konfigurasi runtime AI dan API Key.
+              </span>
+            </div>
+          )}
+
           {/* Prominent Runtime Selector Cards */}
+          <fieldset disabled={!isSystemAdmin} className="space-y-6 disabled:opacity-90">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Option A: API Runtime */}
             <div
-              onClick={() => handleModeChange("api")}
-              className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+              onClick={() => {
+                if (isSystemAdmin) handleModeChange("api");
+              }}
+              className={`p-4 rounded-xl border-2 transition-all ${
+                isSystemAdmin ? "cursor-pointer" : "cursor-not-allowed"
+              } ${
                 formMode === "api"
                   ? "border-emerald-500 bg-emerald-500/5 shadow-sm"
                   : "border-border hover:border-muted-foreground/30 bg-card"
@@ -594,8 +629,12 @@ export default function AIUsageDashboard() {
 
             {/* Option B: Local Runtime */}
             <div
-              onClick={() => handleModeChange("local")}
-              className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+              onClick={() => {
+                if (isSystemAdmin) handleModeChange("local");
+              }}
+              className={`p-4 rounded-xl border-2 transition-all ${
+                isSystemAdmin ? "cursor-pointer" : "cursor-not-allowed"
+              } ${
                 formMode === "local"
                   ? "border-sky-500 bg-sky-500/5 shadow-sm"
                   : "border-border hover:border-muted-foreground/30 bg-card"
@@ -910,19 +949,22 @@ export default function AIUsageDashboard() {
                 <span>{isTestingConn ? "Menguji Koneksi..." : "Tes Koneksi Sekarang"}</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handleSaveConfig}
-                disabled={updateConfigMutation.isPending}
-                className="flex items-center gap-2 px-5 py-2 rounded-md bg-primary text-primary-foreground font-semibold hover:opacity-90 transition disabled:opacity-50 shadow-sm"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>
-                  {updateConfigMutation.isPending ? "Menyimpan..." : "Simpan & Terapkan Konfigurasi"}
-                </span>
-              </button>
+              {isSystemAdmin && (
+                <button
+                  type="button"
+                  onClick={handleSaveConfig}
+                  disabled={updateConfigMutation.isPending}
+                  className="flex items-center gap-2 px-5 py-2 rounded-md bg-primary text-primary-foreground font-semibold hover:opacity-90 transition disabled:opacity-50 shadow-sm"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>
+                    {updateConfigMutation.isPending ? "Menyimpan..." : "Simpan & Terapkan Konfigurasi"}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
+          </fieldset>
         </div>
       )}
 
@@ -1258,7 +1300,7 @@ export default function AIUsageDashboard() {
       )}
 
       {/* TAB 4: SYSTEM AUDIT TRAIL */}
-      {activeTab === "audit" && (
+      {activeTab === "audit" && canViewAudit && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>

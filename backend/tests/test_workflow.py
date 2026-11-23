@@ -368,6 +368,49 @@ async def test_rbac_unauthorized_actions():
         )
         assert resp_fin_edit.status_code == 403
 
+        # 4. SYSTEM_ADMINISTRATOR & LOGISTICS cannot approve or return (FINANCE_DIRECTOR exclusive)
+        for non_dir in ("SYSTEM_ADMINISTRATOR", "LOGISTICS"):
+            resp_appr = await client.post(
+                f"/api/v1/packages/{pkg_id}/revisions/{rev_id}/approve",
+                headers={"X-User-Role": non_dir},
+                json={"expected_version": 1},
+            )
+            assert resp_appr.status_code == 403
+            resp_ret = await client.post(
+                f"/api/v1/packages/{pkg_id}/revisions/{rev_id}/return",
+                headers={"X-User-Role": non_dir},
+                json={"expected_version": 1, "comment": "Ditolak"},
+            )
+            assert resp_ret.status_code == 403
+
+        # 5. LOGISTICS cannot cancel, validate, or generate documents
+        assert (
+            await client.post(
+                f"/api/v1/packages/{pkg_id}/cancel",
+                headers={"X-User-Role": "LOGISTICS"},
+                json={"reason": "Logistik coba batalkan"},
+            )
+        ).status_code == 403
+        assert (
+            await client.post(
+                f"/api/v1/revisions/{rev_id}/validate",
+                headers={"X-User-Role": "LOGISTICS"},
+            )
+        ).status_code == 403
+        assert (
+            await client.post(
+                f"/api/v1/revisions/{rev_id}/generate",
+                headers={"X-User-Role": "LOGISTICS"},
+                json={"formats": ["XLSX"]},
+            )
+        ).status_code == 403
+
+        # 6. ADMINISTRATION & LOGISTICS cannot access global /audit portal
+        for non_auditor in ("ADMINISTRATION", "LOGISTICS"):
+            assert (
+                await client.get("/api/v1/audit", headers={"X-User-Role": non_auditor})
+            ).status_code == 403
+
 
 @pytest.mark.asyncio
 async def test_state_contingent_cancellation_rbac():

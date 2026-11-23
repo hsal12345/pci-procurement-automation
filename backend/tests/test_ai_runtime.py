@@ -73,12 +73,21 @@ async def test_ai_runtime_configuration_and_toggle():
 async def test_ai_test_connection_endpoint():
     transport = ASGITransport(app=app)
     headers = {
-        "X-User-Role": "ADMINISTRATION",
-        "X-Actor-Name": "Staf Administrasi"
+        "X-User-Role": "SYSTEM_ADMINISTRATOR",
+        "X-Actor-Name": "Administrator Sistem"
     }
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Test connection for local mock engine
+        # Unauthorized roles (ADMINISTRATION, LOGISTICS) receive 403 Forbidden
+        for forbidden_role in ("ADMINISTRATION", "LOGISTICS"):
+            forb = await client.post(
+                "/api/v1/ai/test-connection",
+                headers={"X-User-Role": forbidden_role},
+                json={"runtime_mode": "local", "provider": "mock", "model": "mock-rule-engine"},
+            )
+            assert forb.status_code == 403
+
+        # Test connection for local mock engine (SYSTEM_ADMINISTRATOR / FINANCE_DIRECTOR)
         res = await client.post(
             "/api/v1/ai/test-connection",
             headers=headers,
@@ -100,11 +109,25 @@ async def test_ai_test_connection_endpoint():
 async def test_ai_playground_and_logs():
     transport = ASGITransport(app=app)
     headers = {
-        "X-User-Role": "ADMINISTRATION",
-        "X-Actor-Name": "Staf Administrasi"
+        "X-User-Role": "FINANCE_DIRECTOR",
+        "X-Actor-Name": "Direktur Keuangan"
     }
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Unauthorized roles (ADMINISTRATION, LOGISTICS) receive 403 Forbidden
+        for forbidden_role in ("ADMINISTRATION", "LOGISTICS"):
+            forb_play = await client.post(
+                "/api/v1/ai/playground/test",
+                headers={"X-User-Role": forbidden_role},
+                json={"test_type": "DISCREPANCY", "text_a": "A", "text_b": "B"},
+            )
+            assert forb_play.status_code == 403
+            forb_logs = await client.get(
+                "/api/v1/ai/logs?limit=10",
+                headers={"X-User-Role": forbidden_role},
+            )
+            assert forb_logs.status_code == 403
+
         # 1. Test discrepancy playground
         play_res = await client.post(
             "/api/v1/ai/playground/test",
