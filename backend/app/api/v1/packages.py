@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from app.database import get_db
-from app.api.deps import get_current_user_role
+from app.api.deps import get_current_user_role, require_admin_or_sysadmin
 from app.models.packages import Package, PackageRevision, RevisionLine, DocumentEvent, DocumentNumber
 from app.models.masters import School, Company, TaxPolicyVersion, OfficialAppointment, FundingSource, BudgetClassification
 from app.schemas.packages import (
@@ -48,7 +48,8 @@ async def list_packages(
     school_id: Optional[UUID] = None,
     fiscal_year: Optional[int] = None,
     status_filter: Optional[str] = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
 ):
     query = select(Package).options(
         selectinload(Package.revisions).selectinload(PackageRevision.lines),
@@ -69,7 +70,11 @@ async def list_packages(
 
 
 @router.post("", response_model=PackageResponse, status_code=status.HTTP_201_CREATED)
-async def create_package(payload: PackageCreate, db: AsyncSession = Depends(get_db)):
+async def create_package(
+    payload: PackageCreate,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     # Check school exists
     res_school = await db.execute(select(School).where(School.id == payload.school_id))
     school = res_school.scalar_one_or_none()
@@ -275,7 +280,11 @@ async def create_package(payload: PackageCreate, db: AsyncSession = Depends(get_
 
 
 @router.get("/{id}", response_model=PackageResponse)
-async def get_package(id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_package(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
+):
     result = await db.execute(
         select(Package)
         .options(
@@ -346,7 +355,8 @@ async def delete_package(
 async def get_package_revision(
     revision_id: UUID,
     id: Optional[UUID] = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(get_current_user_role),
 ):
     query = (
         select(PackageRevision)
@@ -565,7 +575,8 @@ async def calculate_revision_totals(
     revision_id: UUID,
     payload: RevisionCalculateRequest,
     id: Optional[UUID] = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
 ):
     """Server-authoritative calculation of subtotal, taxes, grand total, and terbilang text."""
     rev_res = await db.execute(select(PackageRevision).where(PackageRevision.id == revision_id))

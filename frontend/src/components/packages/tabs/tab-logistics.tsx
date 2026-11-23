@@ -42,6 +42,12 @@ export function TabLogistics({
   const [isSavingLogistics, setIsSavingLogistics] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const canEditLogistics =
+    currentRole === "LOGISTICS" ||
+    currentRole === "ADMINISTRATION" ||
+    currentRole === "SYSTEM_ADMINISTRATOR";
+  const effectiveReadOnly = isReadOnly || !canEditLogistics;
+
   // Fetch logistics record
   useEffect(() => {
     async function loadLogistics() {
@@ -110,11 +116,19 @@ export function TabLogistics({
     setIsSavingLogistics(true);
     setSaveSuccess(false);
     try {
-      const payload = {
+      const payload: any = {
         ...logistics,
         dispatch_date: effDispatch,
         receipt_date: effReceipt,
         actual_delivery_date: effReceipt,
+        line_updates: lines.map((l) => ({
+          line_number: l.line_number,
+          condition: l.condition || "BAIK",
+          received_quantity:
+            l.received_quantity !== undefined && l.received_quantity !== null
+              ? Number(l.received_quantity)
+              : Number(l.quantity),
+        })),
       };
       const saved = await apiClient.updateLogistics(revision.id, payload);
       setLogistics(saved);
@@ -129,7 +143,7 @@ export function TabLogistics({
   };
 
   const handleConditionToggle = (idx: number) => {
-    if (isReadOnly) return;
+    if (effectiveReadOnly) return;
     const updated = [...lines];
     const current = updated[idx].condition || "BAIK";
     updated[idx].condition = current === "BAIK" ? "RUSAK" : "BAIK";
@@ -138,7 +152,7 @@ export function TabLogistics({
   };
 
   const handleReceivedQtyChange = (idx: number, val: number) => {
-    if (isReadOnly) return;
+    if (effectiveReadOnly) return;
     const updated = [...lines];
     updated[idx].received_quantity = val;
     setLines(updated);
@@ -208,7 +222,7 @@ export function TabLogistics({
                 <CheckCircle2 className="w-3.5 h-3.5" /> Tersimpan
               </span>
             )}
-            {!isReadOnly && (
+            {!effectiveReadOnly && (
               <button
                 type="button"
                 disabled={isSavingLogistics}
@@ -233,7 +247,7 @@ export function TabLogistics({
             </label>
             <input
               type="text"
-              disabled={isReadOnly}
+              disabled={effectiveReadOnly}
               value={logistics?.delivery_reference || ""}
               onChange={(e) => updateLogisticsField("delivery_reference", e.target.value)}
               placeholder="08/SJ-PCI/2026"
@@ -247,7 +261,7 @@ export function TabLogistics({
             </label>
             <input
               type="text"
-              disabled={isReadOnly}
+              disabled={effectiveReadOnly}
               value={logistics?.courier_name || ""}
               onChange={(e) => updateLogisticsField("courier_name", e.target.value)}
               placeholder="Armada CV PCI"
@@ -261,7 +275,7 @@ export function TabLogistics({
             </label>
             <input
               type="text"
-              disabled={isReadOnly}
+              disabled={effectiveReadOnly}
               value={logistics?.vehicle_plate || ""}
               onChange={(e) => updateLogisticsField("vehicle_plate", e.target.value)}
               placeholder="B 1234 PCI"
@@ -275,7 +289,7 @@ export function TabLogistics({
             </label>
             <input
               type="date"
-              disabled={isReadOnly}
+              disabled={effectiveReadOnly}
               value={logistics?.dispatch_date || ""}
               onChange={(e) => updateLogisticsField("dispatch_date", e.target.value || null)}
               className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono tabular-nums"
@@ -288,7 +302,7 @@ export function TabLogistics({
             </label>
             <input
               type="date"
-              disabled={isReadOnly}
+              disabled={effectiveReadOnly}
               value={logistics?.receipt_date || logistics?.actual_delivery_date || ""}
               onChange={(e) => updateLogisticsField("receipt_date", e.target.value || null)}
               className="w-full px-2.5 py-1.5 bg-background border border-border rounded text-xs outline-none focus:ring-1 focus:ring-ring font-mono tabular-nums"
@@ -349,7 +363,7 @@ export function TabLogistics({
                   <td className="px-3 py-2 text-right">
                     <input
                       type="number"
-                      disabled={isReadOnly}
+                      disabled={effectiveReadOnly}
                       min="0"
                       max={Number(line.quantity)}
                       value={
@@ -364,7 +378,7 @@ export function TabLogistics({
                   <td className="px-3 py-2 text-center">
                     <button
                       type="button"
-                      disabled={isReadOnly}
+                      disabled={effectiveReadOnly}
                       onClick={() => handleConditionToggle(idx)}
                       className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase transition border ${
                         line.condition === "BAIK" || !line.condition
@@ -404,7 +418,7 @@ export function TabLogistics({
         </div>
 
         {/* Upload Dropzone */}
-        {!isReadOnly && (
+        {!effectiveReadOnly && (
           <div className="border border-dashed border-border rounded-lg p-6 text-center hover:border-primary/60 transition bg-muted/10">
             <input
               type="file"

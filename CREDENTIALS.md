@@ -1,12 +1,14 @@
 # PCI Procurement & SPJ System — Account Credentials & RBAC Guide
 
-> **Note:** Self-registration is disabled. New user accounts, role assignments, and password resets can only be managed by a **System Administrator** via the User Management Dashboard (`/users`).
+> **Note:** Self-registration is disabled. The login page (`/login`) accepts **manual credential entry only** (no quick-fill demo account buttons or exposed default password hints). New user accounts, role assignments, and password resets can only be managed by a **System Administrator** via the User Management Dashboard (`/users`).
 
 ---
 
 ## 1. Application URLs
-- **Login Page:** `http://localhost:3000/login`
-- **Main Dashboard:** `http://localhost:3000/packages`
+- **Login Page (Manual Entry Only):** `http://localhost:3000/login`
+- **Main Dashboard (Paket Pengadaan):** `http://localhost:3000/packages`
+- **Portal Jejak Audit (DirKeu & SysAdmin):** `http://localhost:3000/audit`
+- **AI & Audit Usage (DirKeu & SysAdmin):** `http://localhost:3000/ai/usage`
 - **User Management Dashboard (SysAdmin only):** `http://localhost:3000/users`
 - **Backend API & Swagger Docs:** `http://localhost:8000/docs`
 - **DBeaver Web GUI (CloudBeaver):** `http://localhost:8978`
@@ -15,7 +17,7 @@
 
 ## 2. Default Seeded Accounts
 
-All default accounts can sign in using **either** their **Username** or **Email** along with the password below:
+All default accounts (seeded via `backend/seed_master_data.py`) can sign in on `http://localhost:3000/login` by manually entering **either** their **Username** or **Email** along with the password below:
 
 | Role Label | Role Code (`RBAC`) | Full Name | Username | Email | Default Password |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -28,19 +30,32 @@ All default accounts can sign in using **either** their **Username** or **Email*
 
 ## 3. Role-Based Access Control (RBAC) Matrix
 
+Strict RBAC is enforced in both the Next.js frontend (sidebar navigation, `AuthGuard` route matrix, and tab/action controls) and the FastAPI backend (`backend/app/api/deps.py`, `backend/app/core/workflow/state_machine.py`, and `backend/app/api/v1/*.py`, returning `403 Forbidden` for unauthorized roles).
+
 | Module / Capability | `SYSTEM_ADMINISTRATOR` | `ADMINISTRATION` | `FINANCE_DIRECTOR` | `LOGISTICS` |
 | :--- | :---: | :---: | :---: | :---: |
-| **Paket Pengadaan (`/packages`)** — View Packages & Revisions | ✅ | ✅ | ✅ | ✅ |
-| **Buat / Edit Draf Paket, Item, Tanggal & Nomor** | ✅ | ✅ | ❌ | ❌ |
-| **Impor Spreadsheet Excel (`/imports`)** | ✅ | ✅ | ❌ | ❌ |
-| **Master Sekolah & Pejabat (`/schools`)** | ✅ | ✅ | ✅ | ❌ |
-| **Master Rekanan / Perusahaan (`/companies`)** | ✅ | ✅ | ✅ | ❌ |
-| **Validasi Aturan (BR01–BR15) & Ajukan Review (`Submit`)** | ✅ | ✅ | ❌ | ❌ |
-| **Persetujuan Direktur (`Approve`, `Return`, `Issue`, `Reopen`, `Cancel`)** | ✅ | ❌ | ✅ | ❌ |
-| **Fakta Logistik, Pemeriksaan BAPB & Unggah Bukti Foto** | ✅ | ✅ | ❌ | ✅ |
-| **Cetak & Unduh 13 Dokumen SPJ (`XLSX`, `DOCX`, `PDF`, `ZIP`)** | ✅ | ✅ | ✅ | ✅ |
-| **AI & Audit Usage (`/ai/usage`)** | ✅ | ✅ | ✅ | ❌ |
-| **Manajemen Pengguna (`/users`) — Tambah / Edit / Nonaktifkan / Hapus User** | ✅ | ❌ | ❌ | ❌ |
+| **Paket Pengadaan (`/packages`, `/packages/[id]`)** — Lihat Daftar, Revisi, Tab 1–3 (Baca), & Tab 7 Audit Paket | ✅ | ✅ | ✅ | ✅ *(Read-only)* |
+| **Buat / Edit Draf Paket, Item, Tanggal & Nomor, Hitung Total, Hapus Draf** | ✅ | ✅ | ❌ | ❌ |
+| **Impor Dokumen (`/imports` — `.xlsx`, `.pdf`, `.doc`, `.docx` & Pemetaan AI)** | ✅ | ✅ | ❌ | ❌ |
+| **Master Sekolah & Pejabat (`/schools`)** — Halaman UI & Ubah Data (`POST`/`PUT`/`DELETE`) | ✅ | ✅ | ❌ *(API GET saja)* | ❌ *(API GET saja)* |
+| **Master Rekanan / Perusahaan (`/companies`)** — Halaman UI & Ubah Data (`POST`/`PUT`) | ✅ | ✅ | ❌ *(API GET saja)* | ❌ *(API GET saja)* |
+| **Katalog Barang, Satuan, Anggaran & Sumber Dana (`/catalog`)** — Halaman UI & Ubah Data | ✅ | ✅ | ❌ *(API GET saja)* | ❌ *(API GET saja)* |
+| **Paket & Template SPJ (`/templates`)** — Lihat, Validasi, & Simulasi Template | ✅ | ✅ *(Read & Simulate)* | ❌ | ❌ |
+| **Konfigurasi Profil Skema, Kewajiban Dokumen & Unggah Template DOCX (`/templates`)** | ✅ *(Eksklusif)* | ❌ | ❌ | ❌ |
+| **Logistik, Pemeriksaan BAPB & Unggah Bukti Foto — Tab 4 (`logistics`)** | ✅ | ✅ | ❌ *(Read-only)* | ✅ |
+| **Pemeriksaan Sistem — Tab 5 (`inspection`), Validasi BR01–BR15, Disposisi & Audit AI** | ✅ | ✅ | ✅ *(Tanpa Auto-Fix AI)* | ❌ *(Tab Disembunyikan)* |
+| **Rekomendasi & Terapkan Perbaikan AI (`fix-recommendations`, `apply-fixes`)** | ✅ | ✅ | ❌ | ❌ |
+| **Ajukan Review (`Submit`) & Tarik Pengajuan (`Withdraw`)** | ✅ | ✅ | ❌ | ❌ |
+| **Persetujuan Direktur (`Approve` & `Return`)** — Revisi `UNDER_REVIEW` | ❌ | ❌ | ✅ *(Eksklusif)* | ❌ |
+| **Terbitkan Dokumen Resmi (`Issue`) & Buka Revisi Baru (`Reopen`)** | ✅ | ✅ | ✅ | ❌ |
+| **Batalkan Paket (`Cancel`) — Status `DRAFT` / `RETURNED` / `UNDER_REVIEW`** | ✅ | ✅ | ✅ | ❌ |
+| **Batalkan Paket (`Cancel`) — Status `APPROVED` / `ISSUED`** *(State-Contingent)* | ❌ | ❌ | ✅ *(Eksklusif)* | ❌ |
+| **Dokumen & Generator SPJ — Tab 6 (`documents`: Generate 29 Berkas XLSX/DOCX/PDF/ZIP)** | ✅ | ✅ | ✅ | ❌ *(Tab Disembunyikan)* |
+| **Unggah Paket ke Google Drive (`POST /archive/upload`)** | ✅ | ✅ | ❌ *(Lihat status saja)* | ❌ |
+| **Portal Jejak Audit Global (`/audit` & `GET /audit/events`)** | ✅ | ❌ | ✅ | ❌ |
+| **AI & Audit Usage (`/ai/usage` — Telemetry, Log, Playground & Test Koneksi)** | ✅ | ❌ | ✅ | ❌ |
+| **Ubah Konfigurasi Runtime AI (`PUT /ai/config`)** | ✅ *(Eksklusif)* | ❌ | ❌ | ❌ |
+| **Manajemen Pengguna (`/users` — Tambah / Edit / Nonaktifkan / Hapus User)** | ✅ *(Eksklusif)* | ❌ | ❌ | ❌ |
 
 ---
 
@@ -53,7 +68,7 @@ All default accounts can sign in using **either** their **Username** or **Email*
    - In **Manajemen Pengguna** (`/users`), click **Edit / Sandi** on the target user row.
    - Enter a new password in the **Reset Kata Sandi** field or choose a new RBAC role, then click **Simpan Perubahan**.
 3. **Changing Your Own Password:**
-   - Any logged-in user can click **Ubah Sandi** at the bottom of the left sidebar to update their own password.
+   - Any logged-in user can click **Sandi** (tooltip `"Ubah Kata Sandi"`) at the bottom of the left sidebar to update their own password.
 
 ---
 

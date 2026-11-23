@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, getCurrentRole } from "@/lib/api-client";
+import { UserRole } from "@/types/package";
 import {
   FileCode2,
   Upload,
@@ -29,6 +30,20 @@ export default function TemplatesManagementPage() {
   const queryClient = useQueryClient();
   const [schemeFilter, setSchemeFilter] = useState<string>("ALL");
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [currentRole, setCurrentRole] = useState<UserRole>("ADMINISTRATION");
+
+  useEffect(() => {
+    const syncRole = () => setCurrentRole(getCurrentRole());
+    syncRole();
+    window.addEventListener("pci_role_changed", syncRole);
+    window.addEventListener("pci_auth_changed", syncRole);
+    return () => {
+      window.removeEventListener("pci_role_changed", syncRole);
+      window.removeEventListener("pci_auth_changed", syncRole);
+    };
+  }, []);
+
+  const isSystemAdmin = currentRole === "SYSTEM_ADMINISTRATOR";
 
   // Validate & Upload modal state
   const [uploadTarget, setUploadTarget] = useState<any | null>(null);
@@ -216,7 +231,9 @@ export default function TemplatesManagementPage() {
               </h2>
             </div>
             <span className="text-[11px] font-mono text-muted-foreground">
-              Klik kode dokumen untuk mengubah status Wajib (Biru) / Opsional (Abu)
+              {isSystemAdmin
+                ? "Klik kode dokumen untuk mengubah status Wajib (Biru) / Opsional (Abu)"
+                : "Mode Baca & Simulasi (Perubahan konfigurasi hanya untuk SYSTEM_ADMINISTRATOR)"}
             </span>
           </div>
 
@@ -244,13 +261,24 @@ export default function TemplatesManagementPage() {
                         <button
                           key={dc}
                           type="button"
-                          onClick={() => toggleProfileDocMutation.mutate({ profile: prof, docCode: dc })}
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition ${
+                          disabled={!isSystemAdmin}
+                          onClick={() => {
+                            if (isSystemAdmin) {
+                              toggleProfileDocMutation.mutate({ profile: prof, docCode: dc });
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition disabled:cursor-not-allowed disabled:opacity-75 ${
                             isMandatory
                               ? "bg-primary/20 text-primary border-primary/40 hover:bg-primary/30"
                               : "bg-muted/40 text-muted-foreground border-border hover:bg-muted"
                           }`}
-                          title={isMandatory ? `${dc}: WAJIB (klik untuk opsional)` : `${dc}: OPSIONAL (klik untuk wajib)`}
+                          title={
+                            !isSystemAdmin
+                              ? `${dc}: ${isMandatory ? "WAJIB" : "OPSIONAL"} (Hanya SYSTEM_ADMINISTRATOR)`
+                              : isMandatory
+                              ? `${dc}: WAJIB (klik untuk opsional)`
+                              : `${dc}: OPSIONAL (klik untuk wajib)`
+                          }
                         >
                           {dc}
                         </button>
@@ -323,12 +351,18 @@ export default function TemplatesManagementPage() {
                     <td className="px-3 py-2.5 text-center">
                       <button
                         type="button"
-                        onClick={() => toggleTemplateMandatoryMutation.mutate(t)}
-                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                        disabled={!isSystemAdmin}
+                        onClick={() => {
+                          if (isSystemAdmin) {
+                            toggleTemplateMandatoryMutation.mutate(t);
+                          }
+                        }}
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border disabled:cursor-not-allowed disabled:opacity-75 ${
                           t.is_mandatory
                             ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
                             : "bg-zinc-500/15 text-zinc-400 border-zinc-500/30"
                         }`}
+                        title={isSystemAdmin ? "Ubah status wajib/opsional" : "Hanya SYSTEM_ADMINISTRATOR yang dapat mengubah"}
                       >
                         {t.is_mandatory ? "WAJIB" : "OPSIONAL"}
                       </button>
@@ -361,15 +395,17 @@ export default function TemplatesManagementPage() {
                           <Eye className="w-3 h-3 text-sky-400" />
                           <span>Simulasi</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenUploadModal(t)}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 text-[11px] font-semibold"
-                          title="Validasi Token & Unggah Template .docx Baru"
-                        >
-                          <Upload className="w-3 h-3" />
-                          <span>Kelola / Unggah</span>
-                        </button>
+                        {isSystemAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenUploadModal(t)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 text-[11px] font-semibold"
+                            title="Validasi Token & Unggah Template .docx Baru"
+                          >
+                            <Upload className="w-3 h-3" />
+                            <span>Kelola / Unggah</span>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

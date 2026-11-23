@@ -4,6 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_admin_finance_or_sysadmin
 from app.database import get_db
 from app.models.generation import GenerationJob
 from app.models.packages import PackageRevision
@@ -22,7 +23,8 @@ async def trigger_generation(
     id: UUID,
     payload: Optional[GenerateRequest] = None,
     background_tasks: BackgroundTasks = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_finance_or_sysadmin),
 ):
     """Enqueues an asynchronous document generation job for the specified revision.
     Accepts selective format requests (e.g. ['XLSX', 'DOCX', 'PDF', 'ZIP']).
@@ -62,7 +64,11 @@ async def trigger_generation(
 
 
 @router.get("/jobs/{job_id}", response_model=GenerationJobResponse)
-async def get_generation_job_status(job_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_generation_job_status(
+    job_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_finance_or_sysadmin),
+):
     """Polls the status and progress percentage of a document generation job."""
     res = await db.execute(select(GenerationJob).where(GenerationJob.id == job_id))
     job = res.scalar_one_or_none()
@@ -75,7 +81,11 @@ async def get_generation_job_status(job_id: UUID, db: AsyncSession = Depends(get
 
 
 @router.get("/revisions/{id}/jobs/latest", response_model=Optional[GenerationJobResponse])
-async def get_latest_revision_generation_job(id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_latest_revision_generation_job(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_finance_or_sysadmin),
+):
     """Returns the most recent document generation job for a package revision, if any."""
     res = await db.execute(
         select(GenerationJob)

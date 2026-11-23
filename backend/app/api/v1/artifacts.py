@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_admin_finance_or_sysadmin
 from app.database import get_db
 from app.models.generation import Artifact
 from app.schemas.generation import ArtifactResponse
@@ -21,7 +22,11 @@ MIME_TYPES = {
 
 
 @router.get("/revisions/{revision_id}/artifacts", response_model=List[ArtifactResponse])
-async def list_revision_artifacts(revision_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_revision_artifacts(
+    revision_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_finance_or_sysadmin),
+):
     """Lists all generated document artifacts for a specific package revision."""
     res = await db.execute(
         select(Artifact)

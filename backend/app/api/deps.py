@@ -87,8 +87,14 @@ async def get_current_user_role(
     or falls back to X-User-Role header for automated test compatibility.
     Valid roles: ADMINISTRATION, LOGISTICS, FINANCE_DIRECTOR, SYSTEM_ADMINISTRATOR
     """
-    token = _extract_bearer_token(authorization)
-    if token:
+    if authorization and authorization.strip():
+        token = _extract_bearer_token(authorization)
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Format header Authorization tidak sah. Gunakan skema Bearer.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         user = await get_current_user(authorization=authorization, db=db)
         return user.role.upper()
 
@@ -109,8 +115,62 @@ async def get_current_actor_name(
     """Extracts authoritative actor name from JWT Bearer token when present,
     or falls back to X-Actor-Name header.
     """
-    token = _extract_bearer_token(authorization)
-    if token:
+    if authorization and authorization.strip():
+        token = _extract_bearer_token(authorization)
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Format header Authorization tidak sah. Gunakan skema Bearer.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         user = await get_current_user(authorization=authorization, db=db)
         return user.full_name
     return x_actor_name
+
+
+def require_roles(*allowed_roles: str, detail: Optional[str] = None):
+    """Dependency factory enforcing Strict RBAC against the authoritative user role."""
+    allowed = {r.upper() for r in allowed_roles}
+
+    async def _role_checker(role: str = Depends(get_current_user_role)) -> str:
+        if role.upper() not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=detail
+                or f"Akses ditolak (Strict RBAC): Peran '{role}' tidak berwenang melakukan aksi ini.",
+            )
+        return role.upper()
+
+    return _role_checker
+
+
+require_sysadmin_role = require_roles(
+    "SYSTEM_ADMINISTRATOR",
+    detail="Akses ditolak: Hanya Administrator Sistem (SYSTEM_ADMINISTRATOR) yang diizinkan.",
+)
+require_admin_or_sysadmin = require_roles(
+    "ADMINISTRATION",
+    "SYSTEM_ADMINISTRATOR",
+    detail="Akses ditolak: Hanya Staf Administrasi atau Administrator Sistem yang berwenang.",
+)
+require_finance_director = require_roles(
+    "FINANCE_DIRECTOR",
+    detail="Akses ditolak: Hanya Direktur Keuangan (FINANCE_DIRECTOR) yang berwenang.",
+)
+require_finance_or_sysadmin = require_roles(
+    "FINANCE_DIRECTOR",
+    "SYSTEM_ADMINISTRATOR",
+    detail="Akses ditolak: Hanya Direktur Keuangan atau Administrator Sistem yang berwenang.",
+)
+require_admin_finance_or_sysadmin = require_roles(
+    "ADMINISTRATION",
+    "FINANCE_DIRECTOR",
+    "SYSTEM_ADMINISTRATOR",
+    detail="Akses ditolak: Peran Logistik tidak memiliki otorisasi untuk modul ini.",
+)
+require_logistics_admin_or_sysadmin = require_roles(
+    "LOGISTICS",
+    "ADMINISTRATION",
+    "SYSTEM_ADMINISTRATOR",
+    detail="Akses ditolak: Hanya Staf Logistik, Staf Administrasi, atau Administrator Sistem yang berwenang.",
+)

@@ -73,11 +73,11 @@ Standar W3C Web App Manifest untuk menjadikan antarmuka web sebagai aplikasi PWA
   - `icons`: 192x192 & 512x512 (`any` dan `maskable`).
   - `shortcuts`: Tautan cepat untuk *Paket Pengadaan*, *Katalog & Anggaran*, *Impor Dokumen*, dan *AI & Audit Usage*.
 
-### B. Kubernetes Web App Manifest (`manifests/k8s/03-web-app-manifest.yaml`)
-Mendeklarasikan deployment kontainer frontend Next.js pada klaster Kubernetes:
-- **Deployment**: 2 Replicas Next.js production image (`NODE_ENV=production`), terhubung ke backend internal via `http://pci-docker-app-service:8000`.
-- **Service**: ClusterIP exposing port `3000`.
-- **Ingress Controller**: Memetakan traffic domain publik `/` ke Web App dan `/api/`, `/storage/`, `/docs`, `/health` ke Docker App backend.
+### B. Kubernetes Web App Manifest (`manifests/k8s/03-web-app-manifest.yaml` & `04-ingress-manifest.yaml`)
+Mendeklarasikan deployment kontainer frontend Next.js dan routing Ingress pada klaster Kubernetes:
+- **Deployment (`03-web-app-manifest.yaml`)**: 2 Replicas Next.js production image (`NODE_ENV=production`), terhubung ke backend internal via `http://pci-docker-app-service:8000`.
+- **Service (`03-web-app-manifest.yaml`)**: ClusterIP exposing port `3000`.
+- **Ingress Controller (`04-ingress-manifest.yaml`)**: Memetakan traffic host `pci-procurement.local` untuk `/` ke Web App (`pci-web-app-service:3000`) dan `/api/`, `/storage/`, `/docs`, `/health` ke Docker App backend (`pci-docker-app-service:8000`).
 
 ---
 

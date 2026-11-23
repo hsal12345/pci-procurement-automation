@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
-from app.api.deps import get_current_actor_name, get_current_user_role
+from app.api.deps import get_current_actor_name, get_current_user_role, require_admin_or_sysadmin
 from app.config import settings
 from app.database import get_db
 from app.models.imports import ImportRecord
@@ -86,7 +86,9 @@ def _build_preview_response(rec: ImportRecord) -> ImportPreviewResponse:
 
 
 @router.get("/template")
-async def download_import_template():
+async def download_import_template(
+    role: str = Depends(require_admin_or_sysadmin),
+):
     """Downloads a clean, standardized Excel (.xlsx) template compatible with FR02 import."""
     workbook_bytes = import_service.generate_template_workbook()
     return Response(
@@ -258,7 +260,11 @@ async def upload_excel_import(
 
 
 @router.get("/{id}/progress")
-async def get_import_progress(id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_import_progress(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     """Returns latest deterministic extraction & AI mapping progress snapshot for an import."""
     result = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
     rec = result.scalar_one_or_none()
@@ -268,7 +274,11 @@ async def get_import_progress(id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{id}/progress/stream")
-async def stream_import_progress(id: UUID, db: AsyncSession = Depends(get_db)):
+async def stream_import_progress(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     """Streams real-time extraction & AI mapping progress events via Server-Sent Events (SSE)."""
     result = await db.execute(select(ImportRecord).where(ImportRecord.id == id))
     rec = result.scalar_one_or_none()
@@ -287,7 +297,11 @@ async def stream_import_progress(id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{id}/preview", response_model=ImportPreviewResponse)
-async def get_import_preview(id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_import_preview(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    role: str = Depends(require_admin_or_sysadmin),
+):
     """Retrieves normalized preview of candidate transaction lines, raw spreadsheet grid,
     AI column mapping proposal, and detected invariant discrepancies for staff confirmation.
     """

@@ -11,42 +11,10 @@ import {
   EyeOff,
   Loader2,
   AlertCircle,
-  KeyRound,
   ArrowRight,
   Sun,
   Moon,
 } from "lucide-react";
-
-const DEMO_ACCOUNTS = [
-  {
-    username: "sysadmin",
-    label: "System Admin",
-    roleBadge: "SYSADMIN",
-    desc: "Akses penuh & Manajemen Pengguna",
-    color: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300 hover:bg-rose-500/20",
-  },
-  {
-    username: "admin",
-    label: "Staf Administrasi",
-    roleBadge: "ADMIN",
-    desc: "Impor Excel, Paket, Master & Dokumen",
-    color: "border-primary/30 bg-primary/10 text-primary hover:bg-primary/20",
-  },
-  {
-    username: "direktur",
-    label: "Direktur Keuangan",
-    roleBadge: "DIREKTUR",
-    desc: "Review, Persetujuan & Penerbitan SPJ",
-    color: "border-secondary/40 bg-secondary/10 text-secondary hover:bg-secondary/20",
-  },
-  {
-    username: "logistik",
-    label: "Petugas Logistik",
-    roleBadge: "LOGISTIK",
-    desc: "Pengiriman, Pemeriksaan & Bukti BAST",
-    color: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-500/20",
-  },
-];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -99,12 +67,6 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleQuickFill = (username: string) => {
-    setIdentifier(username);
-    setPassword("Admin123!");
-    setError("");
   };
 
   return (
@@ -191,7 +153,7 @@ export default function LoginPage() {
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="contoh: sysadmin atau admin@pci.co.id"
+                  placeholder="Masukkan username atau email"
                   autoComplete="username"
                   className="w-full pl-9 pr-3 py-2 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-mono transition"
                 />
@@ -246,40 +208,6 @@ export default function LoginPage() {
               <span className="text-foreground font-semibold">Administrator Sistem</span>.
             </div>
           </form>
-        </div>
-
-        {/* Quick Fill Role Accounts Card */}
-        <div className="border border-border/80 rounded-xl bg-card p-4 space-y-2.5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 font-semibold">
-              <KeyRound className="w-3.5 h-3.5 text-secondary" />
-              Akun Bawaan per Peran RBAC (Klik untuk isi cepat)
-            </span>
-            <span className="text-[10px] font-mono text-muted-foreground">
-              Sandi: <code className="text-foreground font-bold">Admin123!</code>
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {DEMO_ACCOUNTS.map((acc) => (
-              <button
-                key={acc.username}
-                type="button"
-                onClick={() => handleQuickFill(acc.username)}
-                className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between gap-1 shadow-2xs hover:shadow-xs ${acc.color}`}
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className="font-mono font-bold text-[11px]">@{acc.username}</span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-black/10 dark:bg-black/30 font-bold">
-                    {acc.roleBadge}
-                  </span>
-                </div>
-                <span className="text-[10px] opacity-90 font-sans leading-tight">
-                  {acc.desc}
-                </span>
-              </button>
-            ))}
-          </div>
         </div>
       </div>
     </div>

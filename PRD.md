@@ -6,6 +6,12 @@ Organization: CV Pustaka Cemerlang Indonesia
 
 Product: PCI Procurement & SPJ
 
+> **Implementation Alignment Note:** This document preserves the original September 2026 pilot PRD draft. Compared to this draft, the implemented codebase includes the following refinements:
+> 1. **RBAC Refinement (Section 3):** `SYSTEM_ADMINISTRATOR` (rather than `FINANCE_DIRECTOR`) manages template/profile activation (`/templates` mutations) and AI runtime configuration (`PUT /api/v1/ai/config`); `ADMINISTRATION` and `SYSTEM_ADMINISTRATOR` manage masters/companies/catalog/tax policies; `FINANCE_DIRECTOR` is read-only on masters and exclusively owns `Approve`/`Return` on `UNDER_REVIEW` and cancellation of `APPROVED`/`ISSUED` packages.
+> 2. **Navigation Sidebar (Section 4.1):** The implemented sidebar exposes `Paket Pengadaan`, `Master Sekolah`, `Master Rekanan`, `Katalog & Anggaran`, `Paket & Template SPJ`, `Impor Dokumen`, `Pemeriksaan Sistem`, `Persetujuan Direktur`, `Arsip & Generator`, `Portal Jejak Audit`, `AI & Audit Usage`, and `Manajemen Pengguna`, filtered per role.
+> 3. **Import Formats (Section 1.3 & FR02):** `/imports` supports `.xlsx`, `.pdf`, `.doc`, and `.docx` uploads (in addition to `.xlsx`).
+> 4. **Authentication Transport (Section 10.3):** Implemented via JWT Bearer tokens (`/api/v1/auth/login`) with manual login entry only.
+
 ## 1 Purpose and product outcome
 
 Build an internal web application that lets staff enter or import an SD school procurement transaction once, verify it, and generate a consistent procurement and SPJ document package. The system must produce a completed Excel workbook, printable PDFs, editable Word documents, and a ZIP package. Finance approval, revision history, and searchable archives must be part of the same workflow.

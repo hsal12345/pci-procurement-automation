@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import get_current_user_role
+from app.api.deps import (
+    get_current_actor_name,
+    require_admin_finance_or_sysadmin,
+    require_admin_or_sysadmin,
+    require_finance_director,
+)
 from app.schemas.reviews import (
     SubmitReviewRequest,
     WithdrawReviewRequest,
@@ -36,7 +41,8 @@ async def submit_revision_for_review(
     payload: SubmitReviewRequest,
     id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_admin_or_sysadmin),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Submits a draft revision for Finance Director review.
     Prerequisites: role ADMINISTRATION, zero blocking findings, lines > 0, optimistic lock token.
@@ -46,7 +52,7 @@ async def submit_revision_for_review(
         revision_id=revision_id,
         actor_role=role,
         expected_version=payload.expected_version,
-        actor_name=f"User ({role})",
+        actor_name=actor_name,
         notes=payload.notes
     )
     pkg_id = id or rev.package_id
@@ -75,7 +81,8 @@ async def withdraw_revision_from_review(
     payload: WithdrawReviewRequest,
     id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_admin_or_sysadmin),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Allows Administration to withdraw an UNDER_REVIEW revision back to DRAFT."""
     rev = await workflow_state_machine.withdraw(
@@ -84,7 +91,7 @@ async def withdraw_revision_from_review(
         actor_role=role,
         expected_version=payload.expected_version,
         reason=payload.reason,
-        actor_name=f"User ({role})"
+        actor_name=actor_name
     )
     pkg_id = id or rev.package_id
     return WorkflowActionResponse(
@@ -112,7 +119,8 @@ async def return_revision_with_comments(
     payload: ReturnReviewRequest,
     id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_finance_director),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Allows Finance Director to return an UNDER_REVIEW revision with mandatory correction comments."""
     rev = await workflow_state_machine.return_revision(
@@ -121,7 +129,7 @@ async def return_revision_with_comments(
         actor_role=role,
         expected_version=payload.expected_version,
         comment=payload.comment,
-        actor_name=f"User ({role})"
+        actor_name=actor_name
     )
     pkg_id = id or rev.package_id
     return WorkflowActionResponse(
@@ -149,7 +157,8 @@ async def approve_revision(
     payload: ApproveReviewRequest,
     id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_finance_director),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Allows Finance Director to approve an UNDER_REVIEW revision, permanently locking it."""
     rev = await workflow_state_machine.approve(
@@ -159,7 +168,7 @@ async def approve_revision(
         expected_version=payload.expected_version,
         manifest_hash=payload.manifest_hash,
         note=payload.note,
-        actor_name=f"User ({role})"
+        actor_name=actor_name
     )
     pkg_id = id or rev.package_id
     return WorkflowActionResponse(
@@ -187,7 +196,8 @@ async def issue_approved_package(
     payload: Optional[IssueRequest] = None,
     id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_admin_finance_or_sysadmin),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Executes final issuance pipeline: validates BR13 & BR15, renders clean documents without watermarks,
     validates BR14 export equivalence, transitions package and revision to ISSUED, and registers Drive archival.
@@ -197,7 +207,7 @@ async def issue_approved_package(
         db=db,
         revision_id=revision_id,
         actor_role=role,
-        actor_name=f"User ({role})",
+        actor_name=actor_name,
         notes=notes
     )
     pkg_id = id or rev.package_id
@@ -222,7 +232,8 @@ async def reopen_issued_package(
     id: UUID,
     payload: ReopenPackageRequest,
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_admin_finance_or_sysadmin),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Reopens an APPROVED or ISSUED package by creating a new incremented revision (Revision N+1) in DRAFT status.
     The prior revision remains ISSUED until the new revision reaches ISSUED.
@@ -232,7 +243,7 @@ async def reopen_issued_package(
         package_id=id,
         actor_role=role,
         reason=payload.reason,
-        actor_name=f"User ({role})"
+        actor_name=actor_name
     )
     return new_rev
 
@@ -245,10 +256,12 @@ async def cancel_procurement_package(
     id: UUID,
     payload: CancelPackageRequest,
     db: AsyncSession = Depends(get_db),
-    role: str = Depends(get_current_user_role)
+    role: str = Depends(require_admin_finance_or_sysadmin),
+    actor_name: str = Depends(get_current_actor_name),
 ):
     """Cancels a procurement package with state-contingent authorization:
-    - If current revision is DRAFT or RETURNED: ADMINISTRATION or FINANCE_DIRECTOR.
+    - LOGISTICS is always forbidden (403).
+    - If current revision is DRAFT, RETURNED, or UNDER_REVIEW: ADMINISTRATION, FINANCE_DIRECTOR, or SYSTEM_ADMINISTRATOR.
     - If current revision is APPROVED or ISSUED: FINANCE_DIRECTOR ONLY.
     """
     pkg = await workflow_state_machine.cancel(
@@ -256,7 +269,7 @@ async def cancel_procurement_package(
         package_id=id,
         actor_role=role,
         reason=payload.reason,
-        actor_name=f"User ({role})",
+        actor_name=actor_name,
         expected_version=payload.expected_version
     )
     return WorkflowActionResponse(

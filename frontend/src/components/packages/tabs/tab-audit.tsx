@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { PackageRevision } from "@/types/package";
+import { PackageRevision, UserRole } from "@/types/package";
 import { apiClient } from "@/lib/api-client";
 import { formatDateIndo } from "@/lib/formatters";
 import { AuditDiffPanel, downloadAuditCsv } from "@/components/audit/audit-diff-viewer";
@@ -10,21 +10,25 @@ import { History, ChevronRight, ChevronDown, Clock, Download, Search } from "luc
 interface TabAuditProps {
   packageId: string;
   revision: PackageRevision;
+  currentRole?: UserRole;
 }
 
-export function TabAudit({ packageId, revision }: TabAuditProps) {
+export function TabAudit({ packageId, revision, currentRole }: TabAuditProps) {
   const [events, setEvents] = useState<any[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [actionFilter, setActionFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
+  const canQueryGlobalAudit =
+    currentRole === "FINANCE_DIRECTOR" || currentRole === "SYSTEM_ADMINISTRATOR";
+
   useEffect(() => {
     async function loadEvents() {
       setIsLoading(true);
       try {
         let data = await apiClient.getPackageAudit(packageId);
-        if (!data || data.length === 0) {
+        if ((!data || data.length === 0) && canQueryGlobalAudit) {
           data = await apiClient.getAuditEvents({ entity_id: revision.id, limit: 100 });
         }
         setEvents(data || []);
@@ -35,7 +39,7 @@ export function TabAudit({ packageId, revision }: TabAuditProps) {
       }
     }
     loadEvents();
-  }, [packageId, revision.id]);
+  }, [packageId, revision.id, canQueryGlobalAudit]);
 
   const distinctActions = Array.from(new Set(events.map((e) => e.action).filter(Boolean)));
   const filteredEvents = events.filter((ev) => {
