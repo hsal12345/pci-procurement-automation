@@ -247,8 +247,8 @@ function PackagesListPage() {
 
       {filterParam === "under_review" && (
         <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-amber-300">
-            <ShieldCheck className="w-4 h-4 text-amber-400" />
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+            <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             <span className="font-medium">Filter Aktif: Paket Menunggu Persetujuan Direktur Keuangan (UNDER_REVIEW)</span>
           </div>
           <button
@@ -257,7 +257,7 @@ function PackagesListPage() {
               setStatusFilter("ALL");
               router.replace("/packages");
             }}
-            className="flex items-center gap-1 text-[11px] text-amber-300 hover:text-amber-200 transition"
+            className="flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-300 hover:text-amber-800 dark:hover:text-amber-200 transition"
           >
             <X className="w-3.5 h-3.5" />
             <span>Reset Filter</span>
@@ -415,7 +415,7 @@ function PackagesListPage() {
         ) : (
           <table className="w-full text-left border-collapse font-sans text-xs">
             <thead>
-              <tr className="bg-muted/80 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-slate-200 font-mono shadow-xs">
+              <tr className="bg-muted/80 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-foreground font-mono shadow-xs">
                 <th className="px-3.5 py-2.5">Kode Paket</th>
                 <th className="px-3.5 py-2.5">Nama Sekolah / Lembaga</th>
                 <th className="px-3.5 py-2.5">TA / TW</th>
@@ -531,35 +531,35 @@ function PackagesListPage() {
 function StatusBadge({ status }: { status: string }) {
   if (status === "ISSUED") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40">
         [ 🟢 TERBIT / ISSUED ]
       </span>
     );
   }
   if (status === "APPROVED") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40">
         [ 🟢 DISETUJUI ]
       </span>
     );
   }
   if (status === "UNDER_REVIEW") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/40">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/40">
         [ 🟡 DALAM TINJAUAN ]
       </span>
     );
   }
   if (status === "RETURNED") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-red-500/15 text-red-300 border border-red-500/40">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/40">
         [ 🔴 DIKEMBALIKAN ]
       </span>
     );
   }
   if (status === "CANCELLED") {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-700/50 text-muted-foreground border border-slate-600/60">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30">
         [ ✕ DIBATALKAN ]
       </span>
     );

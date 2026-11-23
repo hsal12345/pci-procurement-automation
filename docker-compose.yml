@@ -8,9 +8,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-pci_spjed}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pci_postgres_data:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-pci_spjed}"]
       interval: 5s
@@ -50,10 +52,12 @@ services:
       GOOGLE_DRIVE_OAUTH_REDIRECT_URI: ${GOOGLE_DRIVE_OAUTH_REDIRECT_URI:-http://localhost:8000/api/v1/archive/oauth/callback}
       GOOGLE_DRIVE_ROOT_FOLDER_ID: ${GOOGLE_DRIVE_ROOT_FOLDER_ID:-}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - pci_backend_storage:/app/storage
       - ./backend/credentials:/app/credentials
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -76,16 +80,40 @@ services:
       NODE_ENV: production
       BACKEND_INTERNAL_URL: http://backend:8000
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    security_opt:
+      - no-new-privileges:true
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: pci-procurement-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/pci-ssl:/etc/nginx/ssl:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    security_opt:
+      - no-new-privileges:true
 
   dbeaver:
     image: dbeaver/cloudbeaver:latest
     container_name: pci-procurement-dbeaver
+    profiles:
+      - tools
     restart: unless-stopped
     ports:
-      - "8978:8978"
+      - "127.0.0.1:8978:8978"
     volumes:
       - pci_cloudbeaver_data:/opt/cloudbeaver/workspace
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       db:
         condition: service_healthy

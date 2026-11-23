@@ -393,7 +393,7 @@ export function TabDatesNumbers({ revision, isReadOnly, onDataChanged }: TabDate
       <div className="border border-border rounded-lg bg-card overflow-hidden shadow-sm">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-slate-200">
+            <tr className="bg-muted/90 border-b border-border text-[11px] uppercase font-mono font-bold tracking-wider text-foreground">
               <th className="px-3 py-2.5 w-10 text-center">Urutan</th>
               <th className="px-3 py-2.5 min-w-[220px]">Dokumen / Peristiwa Siklus</th>
               <th className="px-3 py-2.5 w-48">Tanggal Terpilih</th>

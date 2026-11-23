@@ -227,7 +227,7 @@ export function SchoolOfficialModal({
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 text-xs font-medium text-foreground hover:text-white bg-muted hover:bg-muted/80 rounded-lg transition"
+              className="px-4 py-2 text-xs font-medium text-foreground hover:text-foreground bg-muted hover:bg-muted/80 rounded-lg transition"
             >
               Batal
             </button>

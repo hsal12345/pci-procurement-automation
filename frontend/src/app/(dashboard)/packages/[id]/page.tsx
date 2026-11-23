@@ -294,7 +294,7 @@ export default function PackageWorkspacePage() {
               <Icon className={`w-3.5 h-3.5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
               <span>{tab.label}</span>
               {tab.key === "inspection" && blockingErrorsCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 font-mono text-[9px] border border-red-500/40 font-bold">
+                <span className="ml-1 px-1.5 py-0.2 rounded bg-red-500/20 text-red-700 dark:text-red-300 font-mono text-[9px] border border-red-500/40 font-bold">
                   {blockingErrorsCount}
                 </span>
               )}

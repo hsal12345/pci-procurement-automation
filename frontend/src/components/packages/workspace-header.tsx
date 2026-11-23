@@ -160,7 +160,7 @@ export function WorkspaceHeader({
               Rev {revision.revision_number} (v{revision.version})
             </span>
             {revision.is_locked && (
-              <span className="flex items-center gap-0.5 text-amber-400" title="Terkunci dari penyuntingan langsung">
+              <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400" title="Terkunci dari penyuntingan langsung">
                 <Lock className="w-3 h-3" />
               </span>
             )}
@@ -180,11 +180,11 @@ export function WorkspaceHeader({
                 <Loader2 className="w-3 h-3 animate-spin" /> Menyimpan...
               </span>
             ) : isDirty ? (
-              <span className="flex items-center gap-1 text-amber-400 text-[11px]">
+              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[11px]">
                 <AlertTriangle className="w-3 h-3" /> Perubahan Belum Disimpan
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-emerald-400 text-[11px]">
+              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-[11px]">
                 <CheckCircle2 className="w-3 h-3" /> Tersimpan
               </span>
             )}
@@ -287,7 +287,7 @@ export function WorkspaceHeader({
               <button
                 type="button"
                 onClick={onOpenRejection}
-                className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/40 hover:bg-red-500/25 text-[11px] font-medium transition"
+                className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/40 hover:bg-red-500/25 text-[11px] font-medium transition"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Kembalikan</span>
@@ -341,13 +341,13 @@ export function WorkspaceHeader({
               type="button"
               onClick={handleDeleteDraft}
               disabled={isDeleting}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/40 hover:bg-red-500/25 text-[11px] font-medium transition"
+              className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/40 hover:bg-red-500/25 text-[11px] font-medium transition"
               title="Hapus draf paket pengadaan ini secara permanen"
             >
               {isDeleting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                <Trash2 className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
               )}
               <span>Hapus Draf</span>
             </button>
@@ -378,41 +378,41 @@ export function WorkspaceHeader({
 function StatusBadge({ status }: { status: string }) {
   if (status === "ISSUED") {
     return (
-      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
         [ 🟢 ISSUED ]
       </span>
     );
   }
   if (status === "APPROVED") {
     return (
-      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-teal-500/15 text-teal-300 border border-teal-500/30">
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30">
         [ 🟢 APPROVED ]
       </span>
     );
   }
   if (status === "UNDER_REVIEW") {
     return (
-      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
         [ 🟡 UNDER REVIEW ]
       </span>
     );
   }
   if (status === "RETURNED") {
     return (
-      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-500/15 text-red-300 border border-red-500/30">
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30">
         [ 🔴 RETURNED ]
       </span>
     );
   }
   if (status === "CANCELLED") {
     return (
-      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-500/15 text-zinc-300 border border-zinc-500/30">
+      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border border-zinc-500/30">
         [ ✕ CANCELLED ]
       </span>
     );
   }
   return (
-    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30">
+    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
       [ ⚪ DRAFT ]
     </span>
   );
