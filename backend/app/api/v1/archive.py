@@ -21,7 +21,7 @@ from app.models.generation import Artifact
 from app.models.packages import PackageRevision
 from app.schemas.archive import ArchiveRecordResponse
 from app.services.drive_sync import execute_revision_drive_upload
-from app.services.google_drive_service import google_drive_service
+from app.services.google_drive_service import google_drive_service, sanitize_drive_name
 
 router = APIRouter(tags=["Google Drive Archive"])
 
@@ -134,8 +134,9 @@ async def upload_revision_to_google_drive(
 
     pkg = revision.package
     school_name = (revision.school_snapshot or {}).get("name", "Sekolah")
+    pkg_folder_name = sanitize_drive_name(pkg.package_number, fallback="Paket")
     folder_path = (
-        f"{school_name} / {pkg.fiscal_year} / Triwulan {pkg.quarter} "
+        f"{school_name} / {pkg.fiscal_year} / Triwulan {pkg.quarter} / {pkg_folder_name} "
         f"(Rev-{revision.revision_number})"
     )
 

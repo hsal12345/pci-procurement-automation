@@ -37,6 +37,7 @@ async def _seed_package_and_artifacts(
     fiscal_year: int = 2026,
     quarter: int = 2,
     package_id=None,
+    package_number: str = None,
 ):
     async with AsyncSessionLocal() as db:
         school = await db.scalar(select(School).limit(1))
@@ -62,7 +63,7 @@ async def _seed_package_and_artifacts(
 
         if package_id is None:
             pkg = Package(
-                package_number=f"PKG/{fiscal_year}/Q{quarter}/{uuid4().hex[:4].upper()}",
+                package_number=package_number or f"PKG/{fiscal_year}/Q{quarter}/{uuid4().hex[:4].upper()}",
                 school_id=school.id,
                 fiscal_year=fiscal_year,
                 quarter=quarter,
@@ -156,7 +157,7 @@ async def test_drive_upload_requires_approved_status_and_admin_role(tmp_path):
 
 @pytest.mark.asyncio
 async def test_drive_hierarchy_and_revision_overwrite(tmp_path):
-    """Asserts Lv1(School)->Lv2(Year)->Lv3(Triwulan)->Lv4(Files) and overwrite on revision."""
+    """Asserts Lv1(School)->Lv2(Year)->Lv3(Triwulan)->Lv4(Kode Pengadaan)->Lv5(Files) and overwrite on revision."""
     pkg_id, rev1_id = await _seed_package_and_artifacts(
         tmp_path,
         rev_status="APPROVED",
@@ -164,6 +165,7 @@ async def test_drive_hierarchy_and_revision_overwrite(tmp_path):
         school_name="SD NEGERI KEBON KOSONG 09",
         fiscal_year=2026,
         quarter=2,
+        package_number="PKG/2026/Q2/0001",
     )
     _, rev2_id = await _seed_package_and_artifacts(
         tmp_path,
@@ -176,9 +178,12 @@ async def test_drive_hierarchy_and_revision_overwrite(tmp_path):
     )
 
     mock_hierarchy = {
-        "folder_id": "lv3_triwulan_2_id",
-        "folder_url": "https://drive.google.com/drive/folders/lv3_triwulan_2_id",
-        "display_path": "SD NEGERI KEBON KOSONG 09 / 2026 / Triwulan 2",
+        "folder_id": "lv4_pkg_0001_id",
+        "folder_url": "https://drive.google.com/drive/folders/lv4_pkg_0001_id",
+        "display_path": "SD NEGERI KEBON KOSONG 09 / 2026 / Triwulan 2 / PKG-2026-Q2-0001",
+        "lv1_folder_id": "lv1_school_id",
+        "lv2_folder_id": "lv2_year_id",
+        "lv3_folder_id": "lv3_triwulan_2_id",
     }
 
     async def fake_upload(**kwargs):
@@ -208,12 +213,13 @@ async def test_drive_hierarchy_and_revision_overwrite(tmp_path):
             school_name="SD NEGERI KEBON KOSONG 09",
             fiscal_year=2026,
             quarter=2,
+            package_number="PKG/2026/Q2/0001",
         )
         uploaded_names = [call.kwargs["target_filename"] for call in mock_upload.call_args_list]
         assert "D01_HPS.docx" in uploaded_names
         assert "00_PAKET_ARSIP_LENGKAP.zip" in uploaded_names
 
-        # Upload Rev-2 -> should overwrite in same Lv3 folder & mark Rev-1 SUPERSEDED
+        # Upload Rev-2 -> should overwrite in same Lv4 folder & mark Rev-1 SUPERSEDED
         await execute_revision_drive_upload(rev2_id, actor_name="SysAdmin PCI")
 
     async with AsyncSessionLocal() as db:
@@ -224,7 +230,10 @@ async def test_drive_hierarchy_and_revision_overwrite(tmp_path):
         assert arch2.progress_percent == 100
         assert arch2.uploaded_files == 2
         assert arch2.total_files == 2
+        assert arch2.drive_folder_id == mock_hierarchy["folder_id"]
         assert arch2.drive_folder_url == mock_hierarchy["folder_url"]
+        assert arch2.folder_path == f"{mock_hierarchy['display_path']} (Rev-2)"
+        assert "PKG-2026-Q2-0001" in arch2.current_step
 
         arts2 = (
             await db.execute(select(Artifact).where(Artifact.revision_id == rev2_id))
@@ -240,6 +249,51 @@ async def test_drive_hierarchy_and_revision_overwrite(tmp_path):
         )
         assert audit is not None
         assert audit.after_state["overwritten_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_ensure_hierarchy_creates_4_folder_levels():
+    """Unit test for GoogleDriveService.ensure_hierarchy verifying 4 nested folder levels."""
+    svc = GoogleDriveService()
+    created_folders = [
+        {"id": "lv1_id", "name": "SD NEGERI 01", "webViewLink": "https://drive.google.com/drive/folders/lv1_id"},
+        {"id": "lv2_id", "name": "2026", "webViewLink": "https://drive.google.com/drive/folders/lv2_id"},
+        {"id": "lv3_id", "name": "Triwulan 2", "webViewLink": "https://drive.google.com/drive/folders/lv3_id"},
+        {"id": "lv4_id", "name": "PKG-2026-Q2-0001", "webViewLink": "https://drive.google.com/drive/folders/lv4_id"},
+    ]
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = False
+
+    with (
+        patch.object(Settings, "get_effective_drive_root_folder_id", return_value="root_folder_id"),
+        patch.object(svc, "_auth_headers", new=AsyncMock(return_value={"Authorization": "Bearer tok"})),
+        patch.object(svc, "_ensure_folder", new=AsyncMock(side_effect=created_folders)) as mock_ensure_folder,
+        patch("app.services.google_drive_service.httpx.AsyncClient", return_value=mock_client),
+    ):
+        res = await svc.ensure_hierarchy(
+            school_name="SD NEGERI 01",
+            fiscal_year=2026,
+            quarter=2,
+            package_number="PKG/2026/Q2/0001",
+        )
+
+    assert mock_ensure_folder.await_count == 4
+    calls = mock_ensure_folder.await_args_list
+    assert calls[0].args == (mock_client, {"Authorization": "Bearer tok"}, "root_folder_id", "SD NEGERI 01")
+    assert calls[1].args == (mock_client, {"Authorization": "Bearer tok"}, "lv1_id", "2026")
+    assert calls[2].args == (mock_client, {"Authorization": "Bearer tok"}, "lv2_id", "Triwulan 2")
+    assert calls[3].args == (mock_client, {"Authorization": "Bearer tok"}, "lv3_id", "PKG-2026-Q2-0001")
+
+    assert res == {
+        "folder_id": "lv4_id",
+        "folder_url": "https://drive.google.com/drive/folders/lv4_id",
+        "display_path": "SD NEGERI 01 / 2026 / Triwulan 2 / PKG-2026-Q2-0001",
+        "lv1_folder_id": "lv1_id",
+        "lv2_folder_id": "lv2_id",
+        "lv3_folder_id": "lv3_id",
+    }
 
 
 @pytest.mark.asyncio

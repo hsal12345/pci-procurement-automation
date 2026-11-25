@@ -13,7 +13,7 @@ from app.models.generation import Artifact
 from app.models.packages import PackageRevision
 from app.services.archive_service import archive_service
 from app.services.audit_service import audit_service
-from app.services.google_drive_service import GoogleDriveService, google_drive_service
+from app.services.google_drive_service import GoogleDriveService, google_drive_service, sanitize_drive_name
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class LocalDriveSyncWorker:
 
 async def execute_revision_drive_upload(revision_id: UUID, actor_name: str = "Admin") -> None:
     """Background task that uploads all generated artifacts for an APPROVED/ISSUED revision
-    to Google Drive under Lv1 (Sekolah) -> Lv2 (Year) -> Lv3 (Triwulan) -> Lv4 (Files),
+    to Google Drive under Lv1 (Sekolah) -> Lv2 (Year) -> Lv3 (Triwulan) -> Lv4 (Kode Pengadaan) -> Lv5 (Files),
     overwriting existing files in place and tracking real-time progress.
     """
     logger.info(f"Starting Google Drive upload worker for revision {revision_id} by {actor_name}")
@@ -86,6 +86,7 @@ async def execute_revision_drive_upload(revision_id: UUID, actor_name: str = "Ad
 
             pkg = revision.package
             school_name = (revision.school_snapshot or {}).get("name", "Sekolah")
+            pkg_folder_name = sanitize_drive_name(pkg.package_number, fallback="Paket")
 
             arch_res = await db.execute(
                 select(ArchiveRecord).where(ArchiveRecord.revision_id == revision.id)
@@ -96,7 +97,7 @@ async def execute_revision_drive_upload(revision_id: UUID, actor_name: str = "Ad
                     package_id=pkg.id,
                     revision_id=revision.id,
                     target_provider="GOOGLE_DRIVE",
-                    folder_path=f"{school_name}/{pkg.fiscal_year}/Triwulan {pkg.quarter} (Rev-{revision.revision_number})",
+                    folder_path=f"{school_name}/{pkg.fiscal_year}/Triwulan {pkg.quarter}/{pkg_folder_name} (Rev-{revision.revision_number})",
                     status="SYNCING",
                     progress_percent=5,
                     attempt_count=0,
@@ -133,6 +134,7 @@ async def execute_revision_drive_upload(revision_id: UUID, actor_name: str = "Ad
                     school_name=school_name,
                     fiscal_year=pkg.fiscal_year,
                     quarter=pkg.quarter,
+                    package_number=pkg.package_number,
                 )
                 archive.drive_folder_id = folder_info["folder_id"]
                 archive.drive_folder_url = folder_info["folder_url"]
@@ -186,7 +188,7 @@ async def execute_revision_drive_upload(revision_id: UUID, actor_name: str = "Ad
                 archive.drive_folder_id = sim_folder_id
                 archive.drive_folder_url = f"https://drive.google.com/drive/folders/{sim_folder_id}"
                 archive.folder_path = (
-                    f"{school_name} / {pkg.fiscal_year} / Triwulan {pkg.quarter} (Rev-{revision.revision_number})"
+                    f"{school_name} / {pkg.fiscal_year} / Triwulan {pkg.quarter} / {pkg_folder_name} (Rev-{revision.revision_number})"
                 )
                 archive.progress_percent = 20
                 archive.current_step = "Menyiapkan folder simulasi lokal..."
@@ -226,7 +228,7 @@ async def execute_revision_drive_upload(revision_id: UUID, actor_name: str = "Ad
             archive.last_error = None
             archive.current_step = (
                 f"Selesai! {len(artifacts)} berkas tersimpan di Google Drive "
-                f"({school_name} / {pkg.fiscal_year} / Triwulan {pkg.quarter})."
+                f"({school_name} / {pkg.fiscal_year} / Triwulan {pkg.quarter} / {pkg_folder_name})."
             )
 
             await audit_service.log_event(
