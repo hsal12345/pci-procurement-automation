@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.models.packages import Package, PackageRevision
 from app.models.archive import ArchiveRecord
 from app.services.audit_service import audit_service
+from app.services.google_drive_service import sanitize_drive_name
 
 
 class ArchiveService:
@@ -34,8 +35,9 @@ class ArchiveService:
 
         pkg = revision.package
         school_name = (revision.school_snapshot or {}).get("name", "SDN")
+        pkg_folder_name = sanitize_drive_name(pkg.package_number, fallback="Paket")
         folder_path = (
-            f"{school_name}/{pkg.fiscal_year}/Triwulan {pkg.quarter} "
+            f"{school_name}/{pkg.fiscal_year}/Triwulan {pkg.quarter}/{pkg_folder_name} "
             f"(Rev-{revision.revision_number})"
         )
 

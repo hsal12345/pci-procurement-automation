@@ -397,8 +397,11 @@ class GoogleDriveService:
         school_name: str,
         fiscal_year: int,
         quarter: int,
+        package_number: str = "Paket",
     ) -> Dict[str, str]:
-        """Ensures 3-level folder hierarchy under root: Lv1 (Sekolah) -> Lv2 (Year) -> Lv3 (Triwulan)."""
+        """Ensures 4-level folder hierarchy under root (5 levels total with documents):
+        Lv1 (Sekolah) -> Lv2 (Year) -> Lv3 (Triwulan) -> Lv4 (Kode Pengadaan).
+        """
         root_id = settings.get_effective_drive_root_folder_id()
         if not root_id:
             raise RuntimeError(
@@ -408,19 +411,22 @@ class GoogleDriveService:
         lv1_name = sanitize_drive_name(school_name, fallback="Sekolah")
         lv2_name = sanitize_drive_name(str(fiscal_year), fallback="2026")
         lv3_name = f"Triwulan {quarter}"
+        lv4_name = sanitize_drive_name(package_number, fallback="Paket")
 
         headers = await self._auth_headers()
         async with httpx.AsyncClient(timeout=60.0) as client:
             lv1 = await self._ensure_folder(client, headers, root_id, lv1_name)
             lv2 = await self._ensure_folder(client, headers, lv1["id"], lv2_name)
             lv3 = await self._ensure_folder(client, headers, lv2["id"], lv3_name)
+            lv4 = await self._ensure_folder(client, headers, lv3["id"], lv4_name)
 
         return {
-            "folder_id": lv3["id"],
-            "folder_url": lv3["webViewLink"],
-            "display_path": f"{lv1_name} / {lv2_name} / {lv3_name}",
+            "folder_id": lv4["id"],
+            "folder_url": lv4["webViewLink"],
+            "display_path": f"{lv1_name} / {lv2_name} / {lv3_name} / {lv4_name}",
             "lv1_folder_id": lv1["id"],
             "lv2_folder_id": lv2["id"],
+            "lv3_folder_id": lv3["id"],
         }
 
     @staticmethod

@@ -104,6 +104,9 @@ export function TabDocuments({ revision, packageData, currentRole }: TabDocument
   const schoolName = revision.school_snapshot?.name || "Sekolah";
   const fiscalYear = packageData?.fiscal_year || new Date().getFullYear();
   const quarterNum = packageData?.quarter || 1;
+  const packageCode = packageData?.package_code || packageData?.package_number || "Paket";
+  const drivePackageFolderName =
+    packageCode.replace(/[\\/]+/g, "-").replace(/\s+/g, " ").trim() || "Paket";
 
   const loadState = useCallback(async () => {
     setIsLoading(true);
@@ -766,7 +769,7 @@ export function TabDocuments({ revision, packageData, currentRole }: TabDocument
 
         const driveSteps = [
           { key: "auth", label: "1. Autentikasi API", done: dStep1Done, active: dStep1Active, failed: isDriveFailed && drivePct < 10 },
-          { key: "folders", label: "2. Folder Lv1–Lv3", done: dStep2Done, active: dStep2Active, failed: isDriveFailed && drivePct >= 10 && drivePct < 20 },
+          { key: "folders", label: "2. Folder Lv1–Lv4", done: dStep2Done, active: dStep2Active, failed: isDriveFailed && drivePct >= 10 && drivePct < 20 },
           { key: "upload", label: `3. Unggah & Timpa (${driveUploaded}/${driveTotal})`, done: dStep3Done, active: dStep3Active, failed: isDriveFailed && drivePct >= 20 && drivePct < 98 },
           { key: "done", label: "4. Selesai & Tautan Drive", done: dStep4Done, active: dStep4Active, failed: isDriveFailed && drivePct >= 98 },
         ];
@@ -851,7 +854,7 @@ export function TabDocuments({ revision, packageData, currentRole }: TabDocument
                   )}
                 </div>
 
-                {/* 4-Level Folder Structure Preview */}
+                {/* 5-Level Folder Structure Preview */}
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono text-muted-foreground pt-1">
                   <span className="px-1.5 py-0.5 rounded bg-muted border border-border text-foreground font-semibold">
                     Lv1: {schoolName}
@@ -865,13 +868,17 @@ export function TabDocuments({ revision, packageData, currentRole }: TabDocument
                     Lv3: Triwulan {quarterNum}
                   </span>
                   <span>→</span>
+                  <span className="px-1.5 py-0.5 rounded bg-muted border border-border text-foreground font-semibold">
+                    Lv4: {drivePackageFolderName}
+                  </span>
+                  <span>→</span>
                   <span className="px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/30 text-sky-600 dark:text-sky-300 font-semibold">
-                    Lv4: Berkas Paket SPJ
+                    Lv5: Berkas Paket SPJ
                   </span>
                 </div>
 
                 <p className="text-[11px] text-muted-foreground pt-0.5">
-                  Dokumen hasil generate disimpan lokal terlebih dahulu. Jika terdapat revisi atau unggah ulang, berkas lama di folder <span className="font-mono text-foreground">Triwulan {quarterNum}</span> akan ditimpa (overwrite) secara otomatis.
+                  Dokumen hasil generate disimpan lokal terlebih dahulu. Jika terdapat revisi atau unggah ulang, berkas lama di folder <span className="font-mono text-foreground">{drivePackageFolderName}</span> akan ditimpa (overwrite) secara otomatis.
                 </p>
               </div>
 
